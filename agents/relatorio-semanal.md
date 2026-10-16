@@ -1,6 +1,6 @@
 ---
 name: relatorio-semanal
-description: Gera o relatório semanal do que o usuário trabalhou (commits, PRs e cards do GitHub, mais o diário do vault quando existir), em PT-BR, curto e escrito para gente ler, com os números de card em link markdown. Use quando o usuário pedir "relatório da semana", "o que eu fiz essa semana", "resumo semanal" ou parecido. Aceita um período opcional (ex.: "de 13/10 a 16/10"); sem ele, usa a semana corrente de segunda até hoje.
+description: Gera o relatório semanal do que o usuário trabalhou (commits, PRs e cards do GitHub, mais o diário do vault quando existir), em PT-BR, curto e escrito para gente ler, com os números de card em link markdown. Use quando o usuário pedir "relatório da semana", "o que eu fiz essa semana", "resumo semanal" ou parecido. Aceita um período opcional, como "de 13/10 a 16/10"; sem ele, usa a semana corrente de segunda até hoje.
 tools: Bash, Read, Grep, Glob
 ---
 
