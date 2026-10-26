@@ -57,9 +57,9 @@ claude --plugin-dir mods/nvim-explorer
 
 | Option | Values | Default |
 | --- | --- | --- |
-| `icons` | `nerd` draws Nerd Font glyphs, `unicode` draws `▸`/`▾` arrows with any font | `nerd` |
+| `icons` | `unicode` draws `▸`/`▾` arrows with any font; `nerd` adds nvim-tree's folder and nvim-web-devicons file icons | `unicode` |
 
-Without a Nerd Font in your terminal the `nerd` icons show as boxes; set `icons` to `unicode` in `/config`.
+`nerd` needs a [Nerd Font](https://www.nerdfonts.com/) as your terminal's font, or its icons show as boxes. On Windows Terminal, install CaskaydiaCove Nerd Font (Cascadia Code with the icons patched in), pick it under Settings → your profile → Appearance → Font face, then set `icons` to `nerd` in `/config`.
 
 ## Develop
 

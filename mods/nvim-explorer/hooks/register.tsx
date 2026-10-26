@@ -41,7 +41,7 @@ const isDismissed = atom(
 let gitAt: { revision: number; status: Promise<GitStatus | undefined> } | undefined
 
 export const register: Register = (on, options) => {
-  const icons = options.icons === 'unicode' ? 'unicode' : 'nerd'
+  const icons = options.icons === 'nerd' ? 'nerd' : 'unicode'
 
   on('session.start', async ($, e, next) => {
     await $.command.register({

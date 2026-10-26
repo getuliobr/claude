@@ -168,6 +168,22 @@ test('without a Client the rows are buttons that open folders', async ($, on) =>
   }
 })
 
+test('icons are plain arrows unless nerd is chosen', async ($, on) => {
+  engine(on)
+  const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  expect(await ui.find({ type: 'Text', text: '▸ ', in: 'tree' })).toBeDefined()
+  await ui.unmount()
+})
+
+test('nerd draws nvim-tree folder glyphs', { options: { icons: 'nerd' } }, async ($, on) => {
+  engine(on)
+  const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  const closedFolder = `${String.fromCodePoint(0xe5ff)} `
+  expect(await ui.find({ type: 'Text', text: closedFolder, in: 'tree' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: '▸ ', in: 'tree' })).toBeUndefined()
+  await ui.unmount()
+})
+
 test('folders an earlier version kept open are declined', async ($, on) => {
   engine(on)
   // What the code before the `expanded-1` tag stored stays through a reload.

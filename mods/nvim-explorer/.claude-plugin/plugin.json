@@ -9,8 +9,8 @@
     "icons": {
       "type": "string",
       "title": "Icons",
-      "description": "nerd draws Nerd Font glyphs (needs a Nerd Font in your terminal); unicode works with any font",
-      "default": "nerd",
+      "description": "unicode works with any font; nerd draws nvim-web-devicons file icons and needs a Nerd Font in your terminal",
+      "default": "unicode",
       "options": ["nerd", "unicode"]
     }
   }
