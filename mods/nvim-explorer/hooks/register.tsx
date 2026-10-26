@@ -81,7 +81,7 @@ export const register: Register = (on, options) => {
 
   on('tool.call', async ($, e, next) => {
     const result = await next(e)
-    if (MUTATING_TOOLS.has(String(e.tool))) await bump($).catch(() => {})
+    if (MUTATING_TOOLS.has(e.tool)) await bump($).catch(() => {})
 
     return result
   }).catch(($, e, next) => next(e))
@@ -237,13 +237,7 @@ async function walk(
           (shown.showHidden || !child.name.startsWith('.')) &&
           (shown.showIgnored || child.git !== 'ignored'),
       )
-      .sort((a, b) =>
-        a.isDir !== b.isDir
-          ? a.isDir
-            ? -1
-            : 1
-          : compareNames(a.name, b.name),
-      )
+      .sort((a, b) => Number(b.isDir) - Number(a.isDir) || compareNames(a.name, b.name))
 
     for (const [index, child] of children.entries()) {
       if (rows.length >= MAX_ROWS) {
@@ -269,11 +263,14 @@ async function walk(
   return { rows, isTruncated }
 }
 
+// Case-insensitive, with case breaking ties so the order never depends on
+// what the disk listed first.
 function compareNames(a: string, b: string): number {
-  const left = a.toLowerCase()
-  const right = b.toLowerCase()
+  return compareStrings(a.toLowerCase(), b.toLowerCase()) || compareStrings(a, b)
+}
 
-  return left < right ? -1 : left > right ? 1 : a < b ? -1 : a > b ? 1 : 0
+function compareStrings(a: string, b: string): number {
+  return a < b ? -1 : a > b ? 1 : 0
 }
 
 function gitStatusAt(

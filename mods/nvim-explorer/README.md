@@ -1,6 +1,6 @@
 # nvim-explorer
 
-A Claude Code mod that keeps a file tree docked beside the chat, drawn the way Neovim's nvim-tree draws one: indent markers, folder arrows, Nerd Font icons, a cursorline, `~` past the end of the buffer and a lualine-style status bar. It moves with vim keys, shows git status, and puts files into your prompt as `@` mentions.
+A Claude Code mod that keeps a file tree docked beside the chat, drawn the way Neovim's nvim-tree draws one: indent markers, folder arrows, optional Nerd Font icons, a cursorline, `~` past the end of the buffer and a lualine-style status bar. It moves with vim keys, shows git status, and puts files into your prompt as `@` mentions.
 
 ```text
 ~/Documents/skills-and-agents/..
@@ -24,9 +24,10 @@ Click the tree once to give it the keyboard, then:
 | Keys | Does |
 | --- | --- |
 | `j` `k`, arrows | down / up |
-| `gg` `G` | top / bottom |
+| `gg` `G`, Home End | top / bottom |
 | `Ctrl-d` `Ctrl-u` | half page down / up |
-| `l` | open a folder, or step into an open one |
+| `Ctrl-f` `Ctrl-b`, PageDown PageUp | page down / up |
+| `l` | open a folder or step into an open one; on a file, `@mention` it |
 | `h` | close a folder, or go to its parent |
 | `Enter` `o` | toggle a folder; on a file, `@mention` it in the prompt |
 | `@` | `@mention` the row under the cursor, file or folder |

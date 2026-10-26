@@ -28,8 +28,8 @@ export function parseGitStatus(output: string, base: string): GitStatus {
     if (entry.length < 4) continue
     const x = entry[0] ?? ' '
     const y = entry[1] ?? ' '
-    // A rename or a copy is followed by the path it came from.
-    if (x === 'R' || x === 'C') i++
+    // A rename or a copy, staged or not, is followed by the path it came from.
+    if (isMove(x) || isMove(y)) i++
     const full = entry.slice(3)
     if (!full.startsWith(base)) continue
     const isDir = full.endsWith('/')
@@ -62,6 +62,10 @@ export function markOf(
   if (status.untrackedDirs.some(dir => path.startsWith(`${dir}/`))) return 'untracked'
 
   return isDir && status.dirtyDirs.has(path) ? 'contains' : ''
+}
+
+function isMove(code: string): boolean {
+  return code === 'R' || code === 'C'
 }
 
 function markFor(x: string, y: string): GitMark {
