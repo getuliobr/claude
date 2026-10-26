@@ -1,0 +1,15 @@
+{
+  "name": "nvim-explorer",
+  "version": "0.1.0",
+  "description": "A Neovim-style file tree pane beside the chat: nvim-tree look, hjkl keys, git marks",
+  "types": "./types/index.d.ts",
+  "userConfig": {
+    "icons": {
+      "type": "string",
+      "title": "Icons",
+      "description": "nerd draws Nerd Font glyphs (needs a Nerd Font in your terminal); unicode works with any font",
+      "default": "nerd",
+      "options": ["nerd", "unicode"]
+    }
+  }
+}
