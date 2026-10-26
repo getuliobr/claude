@@ -93,7 +93,7 @@ const Tree: ClientModule<TreeProps, View> = (props, surface) => {
       const row = props.rows[i]
       if (row === undefined) break
       body.push(
-        rowLine(surface, props, row, guides[i] ?? '', i === index, isEmpty(props.rows, i), width),
+        rowLine(surface, props.icons, row, guides[i] ?? '', i === index, isEmpty(props.rows, i), width),
       )
     }
   }
@@ -116,7 +116,7 @@ export default Tree
 
 function rowLine(
   surface: ClientSurface<View>,
-  props: TreeProps,
+  icons: TreeProps['icons'],
   row: TreeRow,
   guide: string,
   isCursor: boolean,
@@ -125,20 +125,15 @@ function rowLine(
 ): RenderElement {
   const { Text } = surface.elements
   const bg = isCursor ? COLOR.cursorLine : undefined
-  const icon = iconOf(row, props.icons, isEmptyDir)
+  const icon = iconOf(row, icons, isEmptyDir)
   const git = row.git === '' ? undefined : GIT[row.git]
   const sign = git === undefined ? '' : ` ${git.sign}`
   const room = width - cells(guide) - cells(icon.arrow) - cells(icon.glyph) - cells(sign)
   const name = clip(nameOf(row.path), Math.max(1, room))
   const pad = ' '.repeat(Math.max(0, room - cells(name)))
-  const nameColor =
-    row.git === 'ignored'
-      ? GIT.ignored.color
-      : row.git === 'contains' || row.git === ''
-        ? row.isDir
-          ? COLOR.folder
-          : COLOR.fg
-        : (git?.color ?? COLOR.fg)
+  // A folder's `contains` dot is colored; its name stays a folder's.
+  const plainColor = row.isDir ? COLOR.folder : COLOR.fg
+  const nameColor = git === undefined || row.git === 'contains' ? plainColor : git.color
 
   return (
     <Text wrap="truncate-end" backgroundColor={bg}>
@@ -233,9 +228,9 @@ function onKey(
   const { index, top } = settle(view, rows, bodyRows)
   const row = rows[index]
   const half = Math.max(1, Math.floor(bodyRows / 2))
-  const go = (to: number, change: Partial<View> = {}): void => {
+  const go = (to: number): void => {
     const at = clamp(to, 0, rows.length - 1)
-    const next: View = { ...view, pending: '', ...change, cursor: rows[at]?.path ?? '', index: at, top }
+    const next: View = { ...view, pending: '', cursor: rows[at]?.path ?? '', index: at, top }
     surface.setState({ ...next, top: settle(next, rows, bodyRows).top })
   }
   const send = (message: TreeMessage): void => {
@@ -308,8 +303,9 @@ function onKey(
     case 'right':
       if (!row.isDir) return send({ op: 'mention', path: row.path })
       if (!row.isOpen) return send({ op: 'open', path: row.path })
+      if (!isEmpty(rows, index)) go(index + 1)
 
-      return (rows[index + 1]?.depth ?? -1) > row.depth ? go(index + 1) : undefined
+      return
     case 'h':
     case 'left':
       if (row.isDir && row.isOpen) return send({ op: 'close', path: row.path })

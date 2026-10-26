@@ -61,7 +61,7 @@ function engine(on: On, gitStatus = '') {
   return { listed, filled }
 }
 
-async function rowNames($: Engine, surface: 'terminal' | 'desktop') {
+async function mountTexts($: Engine, surface: 'terminal' | 'desktop') {
   const ui = await $.ui.mount({ ...PANE, surface })
   const texts = await ui.findAll({ type: 'Text', in: 'tree' })
 
@@ -71,7 +71,7 @@ async function rowNames($: Engine, surface: 'terminal' | 'desktop') {
 test('folders come first, .git never shows, the cursor starts on top', async ($, on) => {
   engine(on)
   for (const surface of ['terminal', 'desktop'] as const) {
-    const { ui, texts } = await rowNames($, surface)
+    const { ui, texts } = await mountTexts($, surface)
     const names = texts.filter(text =>
       ['agents', 'skills', '.env', 'LICENSE', 'README.md', '.git'].includes(text),
     )
@@ -140,6 +140,16 @@ test('git marks a changed file and the folders above it', async ($, on) => {
 
   await ui.key({ key: 'I', in: 'tree' })
   expect(await ui.find({ type: 'Text', text: '.env', in: 'tree' })).toBeUndefined()
+  await ui.unmount()
+})
+
+test('an unstaged rename skips the path it came from', async ($, on) => {
+  // Read as an entry of its own, `README.md` would swallow the change after it.
+  engine(on, ' R notes.md\0README.md\0 M agents/relatorio-semanal.md\0')
+  const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  await ui.key({ key: 'l', in: 'tree' })
+
+  expect(await ui.find({ type: 'Text', text: ' ✗', in: 'tree' })).toBeDefined()
   await ui.unmount()
 })
 
