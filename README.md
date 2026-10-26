@@ -1,6 +1,6 @@
 # Skills and agents
 
-Personal collection of reusable skills and agents for coding assistants. Each folder under `skills/` is an independently installable Codex skill, and each file under `agents/` is an independently installable Claude Code subagent.
+Personal collection of reusable skills, agents and mods for coding assistants. Each folder under `skills/` is an independently installable Codex skill, each file under `agents/` is an independently installable Claude Code subagent, and each folder under `mods/` is a Claude Code mod: a plugin that changes Claude Code's own interface.
 
 ## Skills
 
@@ -38,6 +38,14 @@ gera meu relatório da semana
 ```
 
 Without a date range it covers Monday of the current week through today. It groups the work by theme instead of by pull request, describes effects rather than code, keeps the technical terms your team already uses untranslated (ledger, webhook, deploy), and does not claim an open issue is in progress unless it finds commits for it. After the report it adds a short note listing what you should check before sending it. If the repository keeps a versioned work journal with an `autor:` field in the frontmatter, it reads your entries for the context behind each issue.
+
+## Mods
+
+| Mod | Purpose |
+| --- | --- |
+| [nvim-explorer](mods/nvim-explorer/README.md) | Keep a Neovim-style file tree docked beside the chat: nvim-tree look, vim keys, git marks, and Enter to `@mention` a file. |
+
+Load a mod for one session with `claude --plugin-dir mods/<mod>`. Each mod's README lists its keys and options.
 
 ## Install a skill
 
