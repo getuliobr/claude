@@ -52,7 +52,7 @@ export const register: Register = (on, options) => {
       void $.ui.open({ id: PANE, title: TITLE, columns: WIDTH })
     }
     // Catches what changes on disk outside Claude's own tools.
-    $.clock.every(5000, () => void refreshIfShown($))
+    $.clock.every(5000, () => void refreshIfShown($).catch(() => {}))
 
     return next(e)
   })
