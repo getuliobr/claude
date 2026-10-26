@@ -1,13 +1,9 @@
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register, RenderSurface } from 'claude-code'
 
-import type {
-  ExplorerFilters,
-  GitMark,
-  TreeMessage,
-  TreeProps,
-  TreeRow,
-} from '../types'
+import type { ExplorerFilters, TreeMessage, TreeProps, TreeRow } from '../types'
+import { markOf, parseGitStatus } from './git'
+import type { GitStatus } from './git'
 
 const PANE = 'explorer'
 const TITLE = 'NvimTree'
@@ -41,12 +37,8 @@ const isDismissed = atom(
   false,
 )
 
-type GitStatus = {
-  marks: Map<string, GitMark>
-  ignoredDirs: string[]
-  untrackedDirs: string[]
-  dirtyDirs: Set<string>
-}
+// One `git status` per revision, shared by every draw that asks for it.
+let gitAt: { revision: number; status: Promise<GitStatus | undefined> } | undefined
 
 export const register: Register = (on, options) => {
   const icons = options.icons === 'unicode' ? 'unicode' : 'nerd'
@@ -284,20 +276,31 @@ function compareNames(a: string, b: string): number {
   return left < right ? -1 : left > right ? 1 : a < b ? -1 : a > b ? 1 : 0
 }
 
-// Git is not read yet: every row is clean.
 function gitStatusAt(
-  _$: EngineInterface,
-  _revision: number,
+  $: EngineInterface,
+  revision: number,
 ): Promise<GitStatus | undefined> {
-  return Promise.resolve(undefined)
+  if (gitAt?.revision !== revision) {
+    gitAt = { revision, status: readGitStatus($).catch(() => undefined) }
+  }
+
+  return gitAt.status
 }
 
-function markOf(
-  _git: GitStatus | undefined,
-  _path: string,
-  _isDir: boolean,
-): GitMark {
-  return ''
+// Outside a repository, or without git, every row is drawn clean.
+async function readGitStatus($: EngineInterface): Promise<GitStatus | undefined> {
+  const prefix = await $.process.run(['git', 'rev-parse', '--show-prefix'])
+  if (prefix.exitCode !== 0) return undefined
+  const status = await $.process.run([
+    'git',
+    'status',
+    '--porcelain=v1',
+    '-z',
+    '--ignored',
+  ])
+  if (status.exitCode !== 0) return undefined
+
+  return parseGitStatus(status.stdout, prefix.stdout.trim())
 }
 
 function parseMessage(data: unknown): TreeMessage | undefined {
