@@ -223,7 +223,7 @@ async function walk(
   let isTruncated = false
 
   const visit = async (dir: string, depth: number): Promise<void> => {
-    const entries = await $.fs.list(dir === '' ? undefined : dir).catch(() => [])
+    const entries = await $.fs.list(dir === '' ? '.' : dir).catch(() => [])
     const children = entries
       .map(entry => {
         const path = dir === '' ? entry.name : `${dir}/${entry.name}`
