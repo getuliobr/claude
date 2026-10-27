@@ -79,7 +79,7 @@ test('folders come first, .git never shows, the cursor starts on top', async ($,
     expect((await ui.find({ type: 'Text', text: /^agents$/, in: 'tree' }))?.props.backgroundColor).toBe(
       '#292e42',
     )
-    expect(await ui.find({ type: 'Text', text: /skills-and-agents\/\.\.$/, in: 'tree' })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: /^skills-and-agents$/, in: 'tree' })).toBeDefined()
     await ui.unmount()
   }
 })

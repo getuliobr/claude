@@ -357,8 +357,7 @@ function nameOf(path: string): string {
 }
 
 function rootLabel(cwd: string): string {
-  const slashed = cwd.replace(/\\/g, '/')
-  const home = /^(?:[A-Za-z]:\/Users\/[^/]+|\/Users\/[^/]+|\/home\/[^/]+)/.exec(slashed)
+  const trimmed = cwd.replace(/\\/g, '/').replace(/\/+$/, '')
 
-  return `${home ? `~${slashed.slice(home[0].length)}` : slashed}/..`
+  return nameOf(trimmed) || '/'
 }

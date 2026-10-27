@@ -3,7 +3,7 @@
 A Claude Code mod that keeps a file tree docked beside the chat, drawn the way Neovim's nvim-tree draws one: indent markers, folder arrows, optional Nerd Font icons, a cursorline, `~` past the end of the buffer and a lualine-style status bar. It moves with vim keys, shows git status, and puts files into your prompt as `@` mentions.
 
 ```text
-~/Documents/skills-and-agents/..
+skills-and-agents
 ▸ .github
 ▾ agents
 └   relatorio-semanal.md        ✗
