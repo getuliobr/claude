@@ -209,12 +209,13 @@ test('past eight projects the rest go unread', async ($, on) => {
   const names = Array.from({ length: 20 }, (_, i) => `p${String(i).padStart(2, '0')}`)
   const { gitIn } = engine(on, {
     repos: Object.fromEntries(names.map(name => [name, ' M a.ts\0'])),
-    disk: { '': names.map(dir) },
+    // Listed backwards: the projects drawn on top are still the ones read.
+    disk: { '': [...names].reverse().map(dir) },
   })
   const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
   expect(await ui.find({ type: 'Text', text: /^p00$/, in: 'tree' })).toBeDefined()
   // Asking whether the root is a repository took the eighth.
-  expect(new Set(gitIn).size).toBe(7)
+  expect(new Set(gitIn)).toEqual(new Set(names.slice(0, 7)))
   await ui.unmount()
 })
 

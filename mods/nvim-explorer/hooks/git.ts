@@ -1,7 +1,7 @@
 import type { GitMark } from '../types'
 
 export type GitStatus = {
-  /** Each path git names, relative to the session's directory. */
+  /** Each path git names, relative to the folder git was read from. */
   marks: Map<string, GitMark>
   /** Folders git reports whole as ignored or untracked: so is all beneath. */
   ignoredDirs: string[]
@@ -12,8 +12,8 @@ export type GitStatus = {
 
 /**
  * Reads `git status --porcelain=v1 -z --ignored`, whose paths are relative
- * to the repository's top, into marks relative to `base`, the session's
- * directory under that top (`git rev-parse --show-prefix`).
+ * to the repository's top, into marks relative to `base`, the folder git
+ * was read from under that top (`git rev-parse --show-prefix`).
  */
 export function parseGitStatus(output: string, base: string): GitStatus {
   const status: GitStatus = {

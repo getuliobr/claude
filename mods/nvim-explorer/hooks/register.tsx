@@ -257,20 +257,25 @@ async function walk(
           (shown.showHidden || !child.name.startsWith('.')) &&
           (shown.showIgnored || child.git !== 'ignored'),
       )
-    // A folder with a repository of its own is read by that repository.
-    const children = (
-      await Promise.all(
-        kept.map(async child => {
-          const isRepo =
-            child.isDir &&
-            (await $.fs.exists(absoluteOf(root, `${child.path}/.git`)).catch(() => false))
-          if (!isRepo) return { ...child, repo }
-          const own = { dir: child.path, status: await statusOf(child.path) }
+      .sort((a, b) => Number(b.isDir) - Number(a.isDir) || compareNames(a.name, b.name))
+    // A folder with a repository of its own is read by that repository. The
+    // repositories take their reads in the order the rows are drawn, so past
+    // MAX_REPOS it is the ones further down that go unread.
+    const isRepo = await Promise.all(
+      kept.map(child =>
+        child.isDir
+          ? $.fs.exists(absoluteOf(root, `${child.path}/.git`)).catch(() => false)
+          : false,
+      ),
+    )
+    const children = await Promise.all(
+      kept.map(async (child, index) => {
+        if (!isRepo[index]) return { ...child, repo }
+        const own = { dir: child.path, status: await statusOf(child.path) }
 
-          return { ...child, repo: own, git: topMark(own.status, child.git) }
-        }),
-      )
-    ).sort((a, b) => Number(b.isDir) - Number(a.isDir) || compareNames(a.name, b.name))
+        return { ...child, repo: own, git: topMark(own.status, child.git) }
+      }),
+    )
 
     for (const [index, child] of children.entries()) {
       if (rows.length >= MAX_ROWS) {
