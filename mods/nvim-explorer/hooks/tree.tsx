@@ -441,6 +441,9 @@ const BY_NAME: Record<string, readonly [string, string]> = {
   '.gitattributes': [nf(0xe702), '#f54d27'],
   '.gitmodules': [nf(0xe702), '#f54d27'],
   '.env': [nf(0xf462), '#faf743'],
+  // Codicons' Claude mark and Material Design's robot, for agent instructions.
+  'CLAUDE.md': [nf(0xec82), '#d97757'],
+  'AGENTS.md': [nf(0xf06a9), '#cbcb41'],
   'package.json': [nf(0xe71e), '#e8274b'],
   'package-lock.json': [nf(0xe71e), '#7a0d21'],
   Dockerfile: [nf(0xf308), '#458ee6'],

@@ -260,6 +260,16 @@ test('nerd draws nvim-tree folder glyphs', { options: { icons: 'nerd' } }, async
   await ui.unmount()
 })
 
+test('nerd marks agent instructions apart from markdown', { options: { icons: 'nerd' } }, async ($, on) => {
+  engine(on, { disk: { ...DISK, '': [file('CLAUDE.md'), file('AGENTS.md'), file('README.md')] } })
+  const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  const glyph = (code: number): string => `${String.fromCodePoint(code)} `
+  expect(await ui.find({ type: 'Text', text: glyph(0xec82), in: 'tree' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: glyph(0xf06a9), in: 'tree' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: glyph(0xe609), in: 'tree' })).toBeDefined()
+  await ui.unmount()
+})
+
 test('folders an earlier version kept open are declined', async ($, on) => {
   engine(on)
   // What the code before the `expanded-1` tag stored stays through a reload.
