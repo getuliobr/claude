@@ -64,6 +64,13 @@ export function markOf(
   return isDir && status.dirtyDirs.has(path) ? 'contains' : ''
 }
 
+/** Whether anything in the repository changed: ignored paths aside. */
+export function hasChanges(status: GitStatus): boolean {
+  for (const mark of status.marks.values()) if (mark !== 'ignored') return true
+
+  return false
+}
+
 function isMove(code: string): boolean {
   return code === 'R' || code === 'C'
 }

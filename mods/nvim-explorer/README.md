@@ -46,6 +46,8 @@ Click the tree once to give it the keyboard, then:
 
 Git marks follow nvim-tree: `✗` changed, `✓` staged, `★` untracked, `➜` renamed, `!` conflicted, `◌` ignored (the row is dimmed), and `●` on a folder that holds changes. The tree re-reads the disk and git after Claude writes or runs a command, and every five seconds while it is shown.
 
+The tree is rooted where the session started, and a `cd` in the shell does not move it. Started in a folder of several projects, such as a `backend` and a `frontend` repository side by side, it reads git in each project whose folder shows in the tree, not in the folder above them. It reads at most eight repositories per refresh, counting the check on the root; projects past that are drawn without marks.
+
 ## Install
 
 Load it for one session from this repository:

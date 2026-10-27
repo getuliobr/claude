@@ -16,7 +16,7 @@ export type GitMark =
 
 /** One visible row of the tree, in the order it is drawn. */
 export type TreeRow = {
-  /** Relative to the session's directory, `/`-separated. */
+  /** Relative to the session's root, where it started; `/`-separated. */
   path: string
   depth: number
   isDir: boolean
