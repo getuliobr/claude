@@ -1,8 +1,8 @@
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register, RenderSurface } from 'claude-code'
 
-import type { ExplorerFilters, TreeMessage, TreeProps, TreeRow } from '../types'
-import { markOf, parseGitStatus } from './git'
+import type { ExplorerFilters, GitMark, TreeMessage, TreeProps, TreeRow } from '../types'
+import { hasChanges, markOf, parseGitStatus } from './git'
 import type { GitStatus } from './git'
 
 const PANE = 'explorer'
@@ -12,6 +12,8 @@ const WIDTH = 32
 // A Client's props are capped at 100,000 characters serialized.
 const MAX_ROWS = 900
 const NEVER_SHOWN = new Set(['.git'])
+// Repositories read per refresh: the root's, then those whose folders show.
+const MAX_REPOS = 8
 // Tools that can change what is on disk: the tree re-reads after each.
 const MUTATING_TOOLS = new Set([
   'Write',
@@ -37,8 +39,14 @@ const isDismissed = atom(
   false,
 )
 
-// One `git status` per revision, shared by every draw that asks for it.
-let gitAt: { revision: number; status: Promise<GitStatus | undefined> } | undefined
+// One `git status` per repository and revision, shared by every draw that
+// asks for it. Keyed by the repository's folder in the tree, '' for the root's.
+let gitAt:
+  | { revision: number; root: string; repos: Map<string, Promise<GitStatus | undefined>> }
+  | undefined
+
+/** A repository and the folder in the tree it starts at. */
+type Repo = { dir: string; status: GitStatus | undefined }
 
 export const register: Register = (on, options) => {
   const icons = options.icons === 'nerd' ? 'nerd' : 'unicode'
@@ -94,14 +102,21 @@ export const register: Register = (on, options) => {
   })
 
   on('ui.render', { component: 'Pane', requestId: PANE }, async ($, e) => {
-    const [open, shown, revision] = await Promise.all([
+    // The tree stays where the session started: a shell `cd` does not move it.
+    const [open, shown, revision, top] = await Promise.all([
       read($, expanded),
       read($, filters),
       read($, rev),
+      $.session.root(),
     ])
-    const git = await gitStatusAt($, revision)
-    const { rows, isTruncated } = await walk($, new Set(open), shown, git)
-    const root = rootLabel(await $.session.cwd())
+    const { rows, isTruncated } = await walk(
+      $,
+      top,
+      new Set(open),
+      shown,
+      gitStatusAt($, top, revision),
+    )
+    const root = rootLabel(top)
     const width = e.props.bodyColumns
     const height = e.props.scroll.bodyRows
 
@@ -187,9 +202,13 @@ async function act(
     case 'refresh':
       await bump($)
       break
-    case 'mention':
-      await $.prompt.fill({ text: mentionOf(message.path), mode: 'insert' })
+    case 'mention': {
+      // After a `cd` a path from the root no longer resolves: spell it whole.
+      const [root, cwd] = await Promise.all([$.session.root(), $.session.cwd()])
+      const path = root === cwd ? message.path : absoluteOf(root, message.path)
+      await $.prompt.fill({ text: mentionOf(path), mode: 'insert' })
       break
+    }
     case 'copy': {
       const text = await copyText($, message.path, message.as)
       const copied = await $.ui.copy({ text, surface })
@@ -215,21 +234,22 @@ async function refreshIfShown($: EngineInterface): Promise<void> {
 
 async function walk(
   $: EngineInterface,
+  root: string,
   open: ReadonlySet<string>,
   shown: ExplorerFilters,
-  git: GitStatus | undefined,
+  statusOf: (dir: string) => Promise<GitStatus | undefined>,
 ): Promise<{ rows: TreeRow[]; isTruncated: boolean }> {
   const rows: TreeRow[] = []
   let isTruncated = false
 
-  const visit = async (dir: string, depth: number): Promise<void> => {
-    const entries = await $.fs.list(dir === '' ? '.' : dir).catch(() => [])
-    const children = entries
+  const visit = async (dir: string, depth: number, repo: Repo): Promise<void> => {
+    const entries = await $.fs.list(absoluteOf(root, dir)).catch(() => [])
+    const kept = entries
       .map(entry => {
         const path = dir === '' ? entry.name : `${dir}/${entry.name}`
         const isDir = entry.kind === 'dir'
 
-        return { name: entry.name, path, isDir, git: markOf(git, path, isDir) }
+        return { name: entry.name, path, isDir, git: markOf(repo.status, within(repo, path), isDir) }
       })
       .filter(
         child =>
@@ -237,7 +257,20 @@ async function walk(
           (shown.showHidden || !child.name.startsWith('.')) &&
           (shown.showIgnored || child.git !== 'ignored'),
       )
-      .sort((a, b) => Number(b.isDir) - Number(a.isDir) || compareNames(a.name, b.name))
+    // A folder with a repository of its own is read by that repository.
+    const children = (
+      await Promise.all(
+        kept.map(async child => {
+          const isRepo =
+            child.isDir &&
+            (await $.fs.exists(absoluteOf(root, `${child.path}/.git`)).catch(() => false))
+          if (!isRepo) return { ...child, repo }
+          const own = { dir: child.path, status: await statusOf(child.path) }
+
+          return { ...child, repo: own, git: topMark(own.status, child.git) }
+        }),
+      )
+    ).sort((a, b) => Number(b.isDir) - Number(a.isDir) || compareNames(a.name, b.name))
 
     for (const [index, child] of children.entries()) {
       if (rows.length >= MAX_ROWS) {
@@ -254,13 +287,26 @@ async function walk(
         isLast: index === children.length - 1,
         git: child.git,
       })
-      if (isOpen) await visit(child.path, depth + 1)
+      if (isOpen) await visit(child.path, depth + 1, child.repo)
     }
   }
 
-  await visit('', 0)
+  await visit('', 0, { dir: '', status: await statusOf('') })
 
   return { rows, isTruncated }
+}
+
+/** A path in the tree as its repository names it. */
+function within(repo: Repo, path: string): string {
+  return repo.dir === '' ? path : path.slice(repo.dir.length + 1)
+}
+
+// A repository's own folder: `contains` when anything inside it changed, or
+// what the repository around it says when it went unread.
+function topMark(status: GitStatus | undefined, outer: GitMark): GitMark {
+  if (status === undefined || outer === 'ignored') return outer
+
+  return hasChanges(status) ? 'contains' : ''
 }
 
 // Case-insensitive, with case breaking ties so the order never depends on
@@ -273,28 +319,40 @@ function compareStrings(a: string, b: string): number {
   return a < b ? -1 : a > b ? 1 : 0
 }
 
+// Past MAX_REPOS a repository goes unread and its rows are drawn clean, so a
+// folder of many projects never starts a `git status` for each.
 function gitStatusAt(
   $: EngineInterface,
+  root: string,
   revision: number,
-): Promise<GitStatus | undefined> {
-  if (gitAt?.revision !== revision) {
-    gitAt = { revision, status: readGitStatus($).catch(() => undefined) }
+): (dir: string) => Promise<GitStatus | undefined> {
+  if (gitAt?.revision !== revision || gitAt.root !== root) {
+    gitAt = { revision, root, repos: new Map() }
   }
+  const { repos } = gitAt
 
-  return gitAt.status
+  return dir => {
+    const known = repos.get(dir)
+    if (known !== undefined) return known
+    if (repos.size >= MAX_REPOS) return Promise.resolve(undefined)
+    const status = readGitStatus($, absoluteOf(root, dir)).catch(() => undefined)
+    repos.set(dir, status)
+
+    return status
+  }
 }
 
 // Outside a repository, or without git, every row is drawn clean.
-async function readGitStatus($: EngineInterface): Promise<GitStatus | undefined> {
-  const prefix = await $.process.run(['git', 'rev-parse', '--show-prefix'])
+async function readGitStatus(
+  $: EngineInterface,
+  cwd: string,
+): Promise<GitStatus | undefined> {
+  const prefix = await $.process.run(['git', 'rev-parse', '--show-prefix'], { cwd })
   if (prefix.exitCode !== 0) return undefined
-  const status = await $.process.run([
-    'git',
-    'status',
-    '--porcelain=v1',
-    '-z',
-    '--ignored',
-  ])
+  const status = await $.process.run(
+    ['git', 'status', '--porcelain=v1', '-z', '--ignored'],
+    { cwd },
+  )
   if (status.exitCode !== 0) return undefined
 
   return parseGitStatus(status.stdout, prefix.stdout.trim())
@@ -342,10 +400,16 @@ async function copyText(
 ): Promise<string> {
   if (as === 'name') return nameOf(path)
   if (as === 'relative') return path
-  const cwd = await $.session.cwd()
-  const separator = cwd.includes('\\') ? '\\' : '/'
 
-  return `${cwd.replace(/[\\/]$/, '')}${separator}${path.split('/').join(separator)}`
+  return absoluteOf(await $.session.root(), path)
+}
+
+/** A `/`-separated path in the tree, whole, in the root's own separators. */
+function absoluteOf(root: string, path: string): string {
+  if (path === '') return root
+  const separator = root.includes('\\') ? '\\' : '/'
+
+  return `${root.replace(/[\\/]$/, '')}${separator}${path.split('/').join(separator)}`
 }
 
 function mentionOf(path: string): string {

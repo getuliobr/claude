@@ -30,35 +30,61 @@ const DISK: Record<string, FsEntry[]> = {
 type Engine = Parameters<TestBody>[0]
 type On = Parameters<TestBody>[1]
 
+const ROOT = 'C:\\Users\\dev\\skills-and-agents'
+
+// The engine hands the fs hooks a path resolved under its working directory,
+// which a test runs in the plugin's own folder: this is the part under ROOT.
+function inTree(path: string): string {
+  return path.replace(/\\/g, '/').replace(/^.*\/skills-and-agents(\/|$)/, '')
+}
+
+type Setup = {
+  /** `git status` output by repository folder, '' for the root's. */
+  repos?: Record<string, string>
+  cwd?: string
+  disk?: Record<string, FsEntry[]>
+}
+
 /** Stands for the engine beneath the mod: the disk above, git, the prompt. */
-function engine(on: On, gitStatus = '') {
+function engine(on: On, { repos = { '': '' }, cwd = ROOT, disk = DISK }: Setup = {}) {
   const listed: string[] = []
   const filled: string[] = []
-  on('session.cwd', () => ({ value: 'C:\\Users\\dev\\skills-and-agents' }))
-  // The engine hands this hook the path resolved under its working directory,
-  // which a test runs in the plugin's own folder.
+  const gitIn: string[] = []
+  on('session.cwd', () => ({ value: cwd }))
+  on('session.root', () => ({ value: ROOT }))
   on('fs.list', (_, e) => {
-    const path = e.path.replace(/\\/g, '/').replace(/^.*\/nvim-explorer(\/|$)/, '')
+    const path = inTree(e.path)
     listed.push(path)
 
-    return { value: DISK[path] ?? [] }
+    return { value: disk[path] ?? [] }
   })
-  on('process.run', (_, e) => ({
-    value: {
-      exitCode: 0,
-      stdout: e.argv[1] === 'rev-parse' ? '\n' : gitStatus,
-      stderr: '',
-      isStdoutTruncated: false,
-      isStderrTruncated: false,
-    },
-  }))
+  on('fs.exists', (_, e) => {
+    const path = inTree(e.path)
+
+    return { value: path.endsWith('/.git') && path.slice(0, -'/.git'.length) in repos }
+  })
+  on('process.run', (_, e) => {
+    const dir = inTree(e.init?.cwd ?? ROOT)
+    if (e.argv[1] === 'status') gitIn.push(dir)
+    const status = repos[dir]
+
+    return {
+      value: {
+        exitCode: status === undefined ? 128 : 0,
+        stdout: status === undefined ? '' : e.argv[1] === 'rev-parse' ? '\n' : status,
+        stderr: '',
+        isStdoutTruncated: false,
+        isStderrTruncated: false,
+      },
+    }
+  })
   on('prompt.fill', (_, e) => {
     filled.push(e.text)
 
     return { isFilled: true }
   })
 
-  return { listed, filled }
+  return { listed, filled, gitIn }
 }
 
 async function mountTexts($: Engine, surface: 'terminal' | 'desktop') {
@@ -130,7 +156,7 @@ test('H hides dotfiles and ? shows the keys', async ($, on) => {
 })
 
 test('git marks a changed file and the folders above it', async ($, on) => {
-  engine(on, ' M agents/relatorio-semanal.md\0?? notes.txt\0!! .env\0')
+  engine(on, { repos: { '': ' M agents/relatorio-semanal.md\0?? notes.txt\0!! .env\0' } })
   const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
   await ui.key({ key: 'l', in: 'tree' })
 
@@ -145,11 +171,50 @@ test('git marks a changed file and the folders above it', async ($, on) => {
 
 test('an unstaged rename skips the path it came from', async ($, on) => {
   // Read as an entry of its own, `README.md` would swallow the change after it.
-  engine(on, ' R notes.md\0README.md\0 M agents/relatorio-semanal.md\0')
+  engine(on, { repos: { '': ' R notes.md\0README.md\0 M agents/relatorio-semanal.md\0' } })
   const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
   await ui.key({ key: 'l', in: 'tree' })
 
   expect(await ui.find({ type: 'Text', text: ' ✗', in: 'tree' })).toBeDefined()
+  await ui.unmount()
+})
+
+test('the tree stays at the root after a cd, and mentions spell the path whole', async ($, on) => {
+  const { filled } = engine(on, { cwd: `${ROOT}\\agents` })
+  const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  expect(await ui.find({ type: 'Text', text: /^skills-and-agents$/, in: 'tree' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /^skills$/, in: 'tree' })).toBeDefined()
+
+  await ui.key({ key: 'l', in: 'tree' })
+  await ui.key({ key: 'j', in: 'tree' })
+  await ui.key({ key: 'return', in: 'tree' })
+  expect(filled.at(-1)).toBe(`@${ROOT}\\agents\\relatorio-semanal.md `)
+  await ui.unmount()
+})
+
+test('a folder of projects reads git in each project, not above them', async ($, on) => {
+  const { gitIn } = engine(on, {
+    repos: { agents: ' M relatorio-semanal.md\0', skills: '' },
+  })
+  const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  // The root is no repository: agents holds a change, skills none.
+  expect(await ui.find({ type: 'Text', text: ' ●', in: 'tree' })).toBeDefined()
+  await ui.key({ key: 'l', in: 'tree' })
+  expect(await ui.find({ type: 'Text', text: ' ✗', in: 'tree' })).toBeDefined()
+  expect(new Set(gitIn)).toEqual(new Set(['agents', 'skills']))
+  await ui.unmount()
+})
+
+test('past eight projects the rest go unread', async ($, on) => {
+  const names = Array.from({ length: 20 }, (_, i) => `p${String(i).padStart(2, '0')}`)
+  const { gitIn } = engine(on, {
+    repos: Object.fromEntries(names.map(name => [name, ' M a.ts\0'])),
+    disk: { '': names.map(dir) },
+  })
+  const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  expect(await ui.find({ type: 'Text', text: /^p00$/, in: 'tree' })).toBeDefined()
+  // Asking whether the root is a repository took the eighth.
+  expect(new Set(gitIn).size).toBe(7)
   await ui.unmount()
 })
 
