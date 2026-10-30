@@ -60,6 +60,18 @@ Trabalhei na semana de 06/04 a 10/04 focado em deixar a importação de dados do
 * **Próximos passos e demandas atuais:** Sigo com a exportação de relatórios em PDF (cards [#221](https://github.com/acme/acme-app/issues/221) e [#223](https://github.com/acme/acme-app/issues/223)) e **já estou trabalhando** no estudo de integração com calendários externos (card [#230](https://github.com/acme/acme-app/issues/230)), mapeando conceitos, lendo as decisões anteriores e preparando uma proposta de fluxo para alinharmos em breve.
 ```
 
+Outro, de uma semana com mais temas (também fictício):
+
+```markdown
+Trabalhei na semana de 19/10 a 23/10 focado em conferir a agenda de cada clínica contra o calendário externo e em deixar a API para parceiros mais limpa no **acme-agenda**. Também avancei nos controles do admin e fechei o estudo do domínio de teleconsulta.
+
+* **Agenda e sincronização com o calendário:** O admin passou a mostrar a diferença entre os horários do calendário externo e os nossos, e ganhou uma conferência diária, consulta por consulta, para achar a origem da diferença (cards [#312](https://github.com/acme/acme-agenda/issues/312) e [#313](https://github.com/acme/acme-agenda/issues/313)). Para corrigir as diferenças entraram o ajuste manual de horário e a ressincronização da agenda inteira ([#316](https://github.com/acme/acme-agenda/issues/316)). Um resumo diário da ocupação, fechado por uma rotina noturna, deixa os relatórios longos mais leves ([#314](https://github.com/acme/acme-agenda/issues/314)).
+* **API para parceiros:** Fechei a série de ajustes que o parceiro pediu. A API ganhou contrato próprio e parou de expor dados internos. O código de confirmação do agendamento ficou padronizado, e entraram a busca por esse código e a listagem de cancelamentos. No novo formato do id de agendamento, evitei que os lembretes de consultas antigas fossem descartados ([#305](https://github.com/acme/acme-agenda/issues/305)).
+* **Controles no admin:** O cancelamento e a remarcação ganharam um liga/desliga próprio para cada clínica ([#321](https://github.com/acme/acme-agenda/issues/321)). A tela de capacidade passou a mostrar o limite de cada sala ao lado do limite do profissional ([#319](https://github.com/acme/acme-agenda/issues/319)). Também ficou registrado que o admin nunca entra no sistema como o paciente ([#318](https://github.com/acme/acme-agenda/issues/318)).
+* **Teleconsulta:** Concluí o estudo do domínio e a proposta de fluxo para a volta da teleconsulta ao sistema (card [#287](https://github.com/acme/acme-agenda/issues/287)).
+* **Próximos passos e demandas atuais:** Está em revisão a mudança na numeração dos ADRs para data e hora, que acaba com números repetidos entre PRs (card [#334](https://github.com/acme/acme-agenda/issues/334)). Na sequência vou validar em produção, com o calendário externo, o relatório da conferência diária e a leitura da capacidade das salas ([#341](https://github.com/acme/acme-agenda/issues/341) e [#342](https://github.com/acme/acme-agenda/issues/342)). Segue comigo, ainda aberto, o card de nome do convênio e filtro por profissional na API para parceiros ([#306](https://github.com/acme/acme-agenda/issues/306)).
+```
+
 As regras que fazem esse estilo:
 
 - **Abertura numa frase só**: o período e o foco da semana. Primeira pessoa ("Trabalhei", "corrigi", "resolvi"); "nós" só onde o trabalho foi do time.
