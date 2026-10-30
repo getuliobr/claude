@@ -65,7 +65,7 @@ function engine(on: On, { repos = { '': '' }, cwd = ROOT, disk = DISK }: Setup =
   })
   on('process.run', (_, e) => {
     const dir = inTree(e.init?.cwd ?? ROOT)
-    if (e.argv[1] === 'status') gitIn.push(dir)
+    if (e.argv.includes('status')) gitIn.push(dir)
     const status = repos[dir]
 
     return {

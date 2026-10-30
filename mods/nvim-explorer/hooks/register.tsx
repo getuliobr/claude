@@ -348,6 +348,8 @@ function gitStatusAt(
 }
 
 // Outside a repository, or without git, every row is drawn clean.
+// `--no-optional-locks` keeps `git status` from rewriting the index, whose
+// `index.lock` would otherwise fail a commit made while the tree redraws.
 async function readGitStatus(
   $: EngineInterface,
   cwd: string,
@@ -355,7 +357,7 @@ async function readGitStatus(
   const prefix = await $.process.run(['git', 'rev-parse', '--show-prefix'], { cwd })
   if (prefix.exitCode !== 0) return undefined
   const status = await $.process.run(
-    ['git', 'status', '--porcelain=v1', '-z', '--ignored'],
+    ['git', '--no-optional-locks', 'status', '--porcelain=v1', '-z', '--ignored'],
     { cwd },
   )
   if (status.exitCode !== 0) return undefined
