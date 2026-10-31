@@ -6,7 +6,7 @@ import { hasChanges, markOf, parseGitStatus } from './git'
 import type { GitStatus } from './git'
 
 const PANE = 'explorer'
-const TITLE = 'NvimTree'
+const TITLE = 'FileTree'
 // nvim-tree's default width is 30; two more for the git column.
 const WIDTH = 32
 // A Client's props are capped at 100,000 characters serialized.
@@ -25,17 +25,17 @@ const MUTATING_TOOLS = new Set([
 ])
 const ROOT_COLOR = '#bb9af7'
 
-const expanded = atom({ plugin: 'nvim-explorer', key: 'expanded' } as const, [], {
+const expanded = atom({ plugin: 'file-tree', key: 'expanded' } as const, [], {
   shape: 'expanded-1',
 })
 const filters = atom(
-  { plugin: 'nvim-explorer', key: 'filters' } as const,
+  { plugin: 'file-tree', key: 'filters' } as const,
   { showHidden: true, showIgnored: true },
   { shape: 'filters-1' },
 )
-const rev = atom({ plugin: 'nvim-explorer', key: 'rev' } as const, 0)
+const rev = atom({ plugin: 'file-tree', key: 'rev' } as const, 0)
 const isDismissed = atom(
-  { plugin: 'nvim-explorer', key: 'isDismissed' } as const,
+  { plugin: 'file-tree', key: 'isDismissed' } as const,
   false,
 )
 

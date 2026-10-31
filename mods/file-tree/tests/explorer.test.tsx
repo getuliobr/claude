@@ -3,11 +3,11 @@ import type { TestBody } from 'claude-code/testing'
 import type { FsEntry } from 'claude-code'
 
 const PANE = {
-  plugin: 'nvim-explorer',
+  plugin: 'file-tree',
   component: 'Pane',
   requestId: 'explorer',
   props: {
-    title: 'NvimTree',
+    title: 'FileTree',
     isFocused: false,
     bodyColumns: 32,
     placement: 'dock',

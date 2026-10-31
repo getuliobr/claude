@@ -43,7 +43,7 @@ Without a date range it covers Monday of the current week through today. It grou
 
 | Mod | Purpose |
 | --- | --- |
-| [nvim-explorer](mods/nvim-explorer/README.md) | Keep a Neovim-style file tree docked beside the chat: nvim-tree look, vim keys, git marks, and Enter to `@mention` a file. |
+| [FileTree](mods/file-tree/README.md) | Keep a Neovim-style file tree docked beside the chat: nvim-tree look, vim keys, git marks, and Enter to `@mention` a file. |
 
 Load a mod for one session with `claude --plugin-dir mods/<mod>`. Each mod's README lists its keys and options.
 

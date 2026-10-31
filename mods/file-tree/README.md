@@ -1,4 +1,4 @@
-# nvim-explorer
+# FileTree
 
 A Claude Code mod that keeps a file tree docked beside the chat, drawn the way Neovim's nvim-tree draws one: indent markers, folder arrows, optional Nerd Font icons, a cursorline, `~` past the end of the buffer and a lualine-style status bar. It moves with vim keys, shows git status, and puts files into your prompt as `@` mentions.
 
@@ -12,7 +12,7 @@ skills-and-agents
   LICENSE
   README.md
 ~
- NORMAL  NvimTree        All 3:8
+ NORMAL  FileTree        All 3:8
 ```
 
 ## Use it
@@ -53,7 +53,7 @@ The tree is rooted where the session started, and a `cd` in the shell does not m
 Load it for one session from this repository:
 
 ```bash
-claude --plugin-dir mods/nvim-explorer
+claude --plugin-dir mods/file-tree
 ```
 
 ## Options
@@ -67,8 +67,8 @@ claude --plugin-dir mods/nvim-explorer
 ## Develop
 
 ```bash
-claude plugin validate mods/nvim-explorer
-claude plugin test mods/nvim-explorer
+claude plugin validate mods/file-tree
+claude plugin test mods/file-tree
 ```
 
 `hooks/register.tsx` reads the disk and git and keeps the open folders in session state; `hooks/tree.tsx` is the `Client` that draws the tree and takes the keys; `hooks/git.ts` parses `git status`.
