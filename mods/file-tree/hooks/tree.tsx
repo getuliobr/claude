@@ -168,7 +168,7 @@ function statusLine(
 ): RenderElement {
   const { Text } = surface.elements
   const mode = view.isHelp ? ' HELP ' : ' NORMAL '
-  const name = ' NvimTree '
+  const name = ' FileTree '
   const flags =
     (props.filters.showHidden ? '' : ' H') +
     (props.filters.showIgnored ? '' : ' I') +

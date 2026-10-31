@@ -6,7 +6,7 @@ import { hasChanges, markOf, parseGitStatus } from './git'
 import type { GitStatus } from './git'
 
 const PANE = 'explorer'
-const TITLE = 'NvimTree'
+const TITLE = 'FileTree'
 // nvim-tree's default width is 30; two more for the git column.
 const WIDTH = 32
 // A Client's props are capped at 100,000 characters serialized.
@@ -25,17 +25,17 @@ const MUTATING_TOOLS = new Set([
 ])
 const ROOT_COLOR = '#bb9af7'
 
-const expanded = atom({ plugin: 'nvim-explorer', key: 'expanded' } as const, [], {
+const expanded = atom({ plugin: 'file-tree', key: 'expanded' } as const, [], {
   shape: 'expanded-1',
 })
 const filters = atom(
-  { plugin: 'nvim-explorer', key: 'filters' } as const,
+  { plugin: 'file-tree', key: 'filters' } as const,
   { showHidden: true, showIgnored: true },
   { shape: 'filters-1' },
 )
-const rev = atom({ plugin: 'nvim-explorer', key: 'rev' } as const, 0)
+const rev = atom({ plugin: 'file-tree', key: 'rev' } as const, 0)
 const isDismissed = atom(
-  { plugin: 'nvim-explorer', key: 'isDismissed' } as const,
+  { plugin: 'file-tree', key: 'isDismissed' } as const,
   false,
 )
 
@@ -54,7 +54,7 @@ export const register: Register = (on, options) => {
   on('session.start', async ($, e, next) => {
     await $.command.register({
       name: 'tree',
-      description: 'Toggle the Neovim-style file explorer pane',
+      description: 'Toggle the FileTree pane',
     })
     if (!(await read($, isDismissed))) {
       void $.ui.open({ id: PANE, title: TITLE, columns: WIDTH })
@@ -72,12 +72,12 @@ export const register: Register = (on, options) => {
     if (isShown) {
       await $.ui.close({ id: PANE })
 
-      return { text: 'File explorer closed.' }
+      return { text: 'FileTree closed.' }
     }
     await update($, isDismissed, () => false)
     await $.ui.open({ id: PANE, title: TITLE, columns: WIDTH, focus: true })
 
-    return { text: 'File explorer opened. Click the tree for hjkl keys, ? for help.' }
+    return { text: 'FileTree opened. Click the tree for hjkl keys, ? for help.' }
   })
 
   // Neither hook judges anything: a failure lets the close or the call go on.
@@ -348,6 +348,8 @@ function gitStatusAt(
 }
 
 // Outside a repository, or without git, every row is drawn clean.
+// `--no-optional-locks` keeps `git status` from rewriting the index, whose
+// `index.lock` would otherwise fail a commit made while the tree redraws.
 async function readGitStatus(
   $: EngineInterface,
   cwd: string,
@@ -355,7 +357,7 @@ async function readGitStatus(
   const prefix = await $.process.run(['git', 'rev-parse', '--show-prefix'], { cwd })
   if (prefix.exitCode !== 0) return undefined
   const status = await $.process.run(
-    ['git', 'status', '--porcelain=v1', '-z', '--ignored'],
+    ['git', '--no-optional-locks', 'status', '--porcelain=v1', '-z', '--ignored'],
     { cwd },
   )
   if (status.exitCode !== 0) return undefined
