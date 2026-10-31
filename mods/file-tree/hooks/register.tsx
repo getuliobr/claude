@@ -54,7 +54,7 @@ export const register: Register = (on, options) => {
   on('session.start', async ($, e, next) => {
     await $.command.register({
       name: 'tree',
-      description: 'Toggle the Neovim-style file explorer pane',
+      description: 'Toggle the FileTree pane',
     })
     if (!(await read($, isDismissed))) {
       void $.ui.open({ id: PANE, title: TITLE, columns: WIDTH })
@@ -72,12 +72,12 @@ export const register: Register = (on, options) => {
     if (isShown) {
       await $.ui.close({ id: PANE })
 
-      return { text: 'File explorer closed.' }
+      return { text: 'FileTree closed.' }
     }
     await update($, isDismissed, () => false)
     await $.ui.open({ id: PANE, title: TITLE, columns: WIDTH, focus: true })
 
-    return { text: 'File explorer opened. Click the tree for hjkl keys, ? for help.' }
+    return { text: 'FileTree opened. Click the tree for hjkl keys, ? for help.' }
   })
 
   // Neither hook judges anything: a failure lets the close or the call go on.

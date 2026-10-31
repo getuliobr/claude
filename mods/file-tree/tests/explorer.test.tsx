@@ -50,6 +50,7 @@ function engine(on: On, { repos = { '': '' }, cwd = ROOT, disk = DISK }: Setup =
   const listed: string[] = []
   const filled: string[] = []
   const gitIn: string[] = []
+  const gitRuns: string[][] = []
   on('session.cwd', () => ({ value: cwd }))
   on('session.root', () => ({ value: ROOT }))
   on('fs.list', (_, e) => {
@@ -65,13 +66,14 @@ function engine(on: On, { repos = { '': '' }, cwd = ROOT, disk = DISK }: Setup =
   })
   on('process.run', (_, e) => {
     const dir = inTree(e.init?.cwd ?? ROOT)
+    gitRuns.push(e.argv)
     if (e.argv.includes('status')) gitIn.push(dir)
     const status = repos[dir]
 
     return {
       value: {
         exitCode: status === undefined ? 128 : 0,
-        stdout: status === undefined ? '' : e.argv[1] === 'rev-parse' ? '\n' : status,
+        stdout: status === undefined ? '' : e.argv.includes('rev-parse') ? '\n' : status,
         stderr: '',
         isStdoutTruncated: false,
         isStderrTruncated: false,
@@ -84,7 +86,7 @@ function engine(on: On, { repos = { '': '' }, cwd = ROOT, disk = DISK }: Setup =
     return { isFilled: true }
   })
 
-  return { listed, filled, gitIn }
+  return { listed, filled, gitIn, gitRuns }
 }
 
 async function mountTexts($: Engine, surface: 'terminal' | 'desktop') {
@@ -166,6 +168,16 @@ test('git marks a changed file and the folders above it', async ($, on) => {
 
   await ui.key({ key: 'I', in: 'tree' })
   expect(await ui.find({ type: 'Text', text: '.env', in: 'tree' })).toBeUndefined()
+  await ui.unmount()
+})
+
+test('git status runs without locking the index', async ($, on) => {
+  // A `git status` holding index.lock fails a commit made while the tree redraws.
+  const { gitRuns } = engine(on)
+  const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  expect(await ui.find({ type: 'Text', text: /^skills$/, in: 'tree' })).toBeDefined()
+  const status = gitRuns.find(argv => argv.includes('status'))
+  expect(status?.slice(0, 3)).toEqual(['git', '--no-optional-locks', 'status'])
   await ui.unmount()
 })
 
