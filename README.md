@@ -1,12 +1,14 @@
 # Skills and agents
 
-Personal collection of reusable skills, agents and mods for coding assistants. Each folder under `skills/` is an independently installable Codex skill, each file under `agents/` is an independently installable Claude Code subagent, and each folder under `mods/` is a Claude Code mod: a plugin that changes Claude Code's own interface.
+Personal collection of reusable skills, agents and mods for coding assistants. Each folder under `skills/` is an independently installable skill (Codex or Claude Code, as noted below), each file under `agents/` is an independently installable Claude Code subagent, and each folder under `mods/` is a Claude Code mod: a plugin that changes Claude Code's own interface.
 
 ## Skills
 
 | Skill | Purpose |
 | --- | --- |
 | [editable-diagrams](skills/editable-diagrams/SKILL.md) | Generate or use a visual reference, rebuild it as named HTML/SVG artwork, inspect the render, and refine through conversation. |
+| [tv-control](skills/tv-control/SKILL.md) | Claude Code: control a Samsung Tizen TV on your network (keys, exact volume, apps, power) and look at its screen through screenshots. Needs [samsung-tv-remote](https://github.com/getuliobr/samsung-tv-remote). |
+| [tv-youtube](skills/tv-youtube/SKILL.md) | Claude Code: search YouTube and play the chosen video or song on the TV, the same way a phone casts. Needs [samsung-tv-remote](https://github.com/getuliobr/samsung-tv-remote). |
 
 ## Agents
 
@@ -57,6 +59,36 @@ cp -R skills/editable-diagrams "${CODEX_HOME:-$HOME/.codex}/skills/"
 ```
 
 If it is already installed, review your local changes before replacing it. Start a new Codex session after installation if the skill does not appear immediately. The skill works with available image-generation and rendering tools; the Python starter itself uses only the standard library.
+
+## Use the TV skills
+
+`tv-control` and `tv-youtube` are Claude Code skills. They drive the Python tooling in
+[getuliobr/samsung-tv-remote](https://github.com/getuliobr/samsung-tv-remote), so set that up first (clone, venv,
+`remote.py pair <tv-ip>`; for screenshots, the TVShot app described in its README). The skills look for the clone at
+`$TV_REMOTE_DIR`, defaulting to `~/Documents/my-remote`.
+
+```bash
+mkdir -p ~/.claude/skills
+cp -R skills/tv-control skills/tv-youtube ~/.claude/skills/
+```
+
+The samsung-tv-remote repository also ships them in `.claude/skills/`, so they load automatically when Claude Code
+runs inside that clone. Then ask in plain language:
+
+```text
+coloca o volume em 20
+```
+
+```text
+toca Tempo Perdido da Legião Urbana na TV
+```
+
+```text
+tira um print da TV e me diz o que está passando
+```
+
+The TV calls need local network access, so Claude Code runs them outside its sandbox; you will be asked to
+approve them unless your permissions allow it.
 
 ## Use editable-diagrams
 
