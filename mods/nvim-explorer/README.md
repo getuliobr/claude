@@ -12,7 +12,7 @@ skills-and-agents
   LICENSE
   README.md
 ~
- NORMAL  NvimTree        All 3:8
+ NORMAL  Explorer        All 3:8
 ```
 
 ## Use it

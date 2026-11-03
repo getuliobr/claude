@@ -7,7 +7,7 @@ const PANE = {
   component: 'Pane',
   requestId: 'explorer',
   props: {
-    title: 'NvimTree',
+    title: 'Explorer',
     isFocused: false,
     bodyColumns: 32,
     placement: 'dock',

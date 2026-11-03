@@ -6,7 +6,7 @@ import { hasChanges, markOf, parseGitStatus } from './git'
 import type { GitStatus } from './git'
 
 const PANE = 'explorer'
-const TITLE = 'NvimTree'
+const TITLE = 'Explorer'
 // nvim-tree's default width is 30; two more for the git column.
 const WIDTH = 32
 // A Client's props are capped at 100,000 characters serialized.
