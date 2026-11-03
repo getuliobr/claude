@@ -45,6 +45,16 @@ export function isAbandoned(error: unknown): boolean {
   return nameOf(error) === 'AbortError' || /\babort(ed)?\b/i.test(messageOf(error))
 }
 
+/**
+ * For a draw: a read cut short means the engine dropped this draw for a newer
+ * one, so nothing it returns is drawn: `undefined`, said nowhere. Any other
+ * failure is thrown on.
+ */
+export function ifDropped(error: unknown): undefined {
+  if (isAbandoned(error)) return undefined
+  throw error
+}
+
 /** A failed call's stand-in, unless the call was cut short: that is thrown on. */
 export function otherwise<T>(fallback: T): (error: unknown) => T {
   return error => {

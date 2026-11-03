@@ -1,6 +1,6 @@
 # gh-issues
 
-A Claude Code mod that keeps the GitHub issues of your projects docked beside the chat, drawn like nvim-explorer's tree: one folder per project, its issues under it, a cursorline and a lualine-style status bar. Open an issue to read its description and comments right there, then hand it to Claude: in the conversation, in the prompt box for you to add to, or to a subagent working in the background.
+A Claude Code mod that keeps the GitHub issues of your projects docked beside the chat, drawn like nvim-explorer's tree: one folder per project, its issues under it, a cursorline and a lualine-style status bar. Open an issue and it shows in a sheet above the prompt, as wide as the chat, with its description and comments rendered as Markdown. Then hand it to Claude: in the conversation, in the prompt box for you to add to, or to a subagent working in the background.
 
 ```text
 work
@@ -28,26 +28,27 @@ Click the pane once to give it the keyboard, then in the list:
 | `gg` `G`, Home End | top / bottom |
 | `Ctrl-f`, PageDown / PageUp | page down / up |
 | `Ctrl-u` | half page up |
-| `l` `Enter` `o` | open a project; on an issue, open the issue |
+| `l` `Enter` `o` | open a project; on an issue, show it in the sheet above the prompt |
+| `x` | put the sheet away; `Enter` on the issue it shows does too |
 | `h` | close a project, or go to it from one of its issues |
 | `Backspace` | close the project the cursor is in |
 | `K` `J`, `P` | first / last sibling, the project above |
+| `/` | search, as GitHub's own search box reads it (see below) |
 | `s` | list open, then closed, then all issues |
 | `m` | list only the issues assigned to you, or all of them again |
 | `W` | close every project |
-| `q` | close the pane |
+| `q` | put the sheet away, or close the pane when none shows |
 
-With an issue open, the pane is a buffer of its title, state, labels, assignees, description and comments, as Markdown with its headings, quotes, lists and code tinted:
+The sheet sits under a line naming the issue, with its actions under that, each key in brackets:
 
-| Keys | Does |
-| --- | --- |
-| `j` `k`, arrows | scroll a line |
-| `Ctrl-f`, Space, PageDown / PageUp | a page down / up |
-| `Ctrl-u` | half a page up |
-| `gg` `G` | top / bottom |
-| `h` `q` `Backspace` | back to the list, the cursor where it was |
+```text
+── getuliobr/civsim#12 ──────────────────────────────────────────── [-]
+[ c ] Send to Claude   [ i ] Fill prompt   [ a ] Agent   [ b ] Browser   [ x ] Close
+```
 
-On an issue, in the list or open:
+Then come the issue's title, state, author, labels, description and comments, and the list marks its row with `◆`. The mouse wheel scrolls the sheet; its `[-]` folds it down to a line. Its keys work once you click the sheet or press `Ctrl-x Tab`, and then the arrows scroll it. In VS Code and on mobile, which draw no sheet, the pane itself shows the issue.
+
+On an issue in the list:
 
 | Keys | Does |
 | --- | --- |
@@ -60,7 +61,19 @@ On an issue, in the list or open:
 | `R` | read GitHub again |
 | `?` | show the keys |
 
-`Esc` hands the keyboard back to the prompt, and so do `Ctrl-d` and `Ctrl-b`, which Claude Code keeps for itself, so they never reach the pane. The keys are read as typed: with Caps Lock on, `j` arrives as `J`. With the mouse, a click on a project opens or closes it, and a second click on an issue opens it.
+`Esc` hands the keyboard back to the prompt, and so do `Ctrl-d` and `Ctrl-b`, which Claude Code keeps for itself, so they never reach the pane. The keys are read as typed: with Caps Lock on, `j` arrives as `J`. With the mouse, a click on a project opens or closes it, and a second click on an issue shows it.
+
+## Search
+
+`/` opens a line at the bottom of the pane, as vim's search does, holding the search in force. Type in GitHub's search syntax and press `Enter`; every project lists only what matches, and the search stays at the top of the pane:
+
+```text
+/assignee:@me label:bug
+/is:closed author:alice "dark mode"
+/no:assignee sort:updated-desc
+```
+
+`Backspace` edits it, `Ctrl-u` clears the line, and `Enter` on an empty line lists everything again. `Backspace` on an empty line puts it away without searching. From the prompt, `/issues assignee:@me` opens the pane on that search. `s` and `m` still apply on top of the search, but an `is:open` or `is:closed` in it wins over `s`. The search is GitHub's, so it reads `label:`, `author:`, `mentions:`, `milestone:`, `no:label`, words in the title or body, and the rest of its qualifiers.
 
 What Claude gets names the issue, its repository, the project's folder and the address, and asks Claude to read the issue and its comments with `gh issue view <n> --repo <owner/repo> --comments` before starting. The issue's own text, its title included, is not pasted into the request. Anyone who can open an issue wrote that text, so it reaches Claude as a command's output rather than as your words.
 
@@ -68,7 +81,7 @@ What Claude gets names the issue, its repository, the project's folder and the a
 
 The pane lists the issues of the folder the session started in, if it is a git repository, and of each folder just under it that is one. Started in a folder holding a `backend` and a `frontend` repository side by side, it lists both. A project's GitHub repository is its `upstream` remote, as a fork's is, or else its `origin`. Two clones of one repository are listed once, and a repository with no GitHub remote is shown dimmed, without issues. The pane reads at most eight repositories and the newest 50 issues of each, with how long ago each was last updated. A count of `50+` means there are more: `gx` opens the rest on GitHub.
 
-The pane reads GitHub when it opens, on `R`, every five minutes while it is shown, and after Claude runs a `gh issue` or `gh pr` command. A failed read says why under its project, such as `Not signed in: run gh auth login`. An issue with a very long description or many comments is cut to fit the pane, and the buffer says what it left out.
+The pane reads GitHub when it opens, on `R`, every five minutes while it is shown, and after Claude runs a `gh issue` or `gh pr` command. A failed read says why under its project, such as `Not signed in: run gh auth login`. An issue with a very long description or many comments is cut to fit, and the sheet says what it left out.
 
 ## Install
 
@@ -85,4 +98,4 @@ claude plugin validate mods/gh-issues
 claude plugin test mods/gh-issues
 ```
 
-`hooks/register.tsx` finds the projects, runs `git` and `gh`, keeps the open projects, the filter and the open issue in session state, and answers what the pane posts. `hooks/issues.tsx` is the `Client` that draws the list and the issue and takes the keys. `hooks/github.ts` reads remotes and `gh`'s JSON and words the request to Claude.
+`hooks/register.tsx` finds the projects, runs `git` and `gh`, keeps the open projects, the filter and the open issue in session state, draws the sheet in the band above the prompt, and answers what the pane posts. `hooks/issues.tsx` is the `Client` that draws the list and takes the keys. `hooks/github.ts` reads remotes and `gh`'s JSON and words the request to Claude. `hooks/shared.ts` shares each read between the pane's draws, and reads again when Claude Code drops a draw midway.

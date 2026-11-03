@@ -1,6 +1,6 @@
 import { expect, test } from 'claude-code/testing'
 
-import { isAbandoned, otherwise, shared } from '../hooks/shared'
+import { ifDropped, isAbandoned, otherwise, shared } from '../hooks/shared'
 
 // What the engine rejects a `$` call with when a newer draw took its draw's place.
 const ABANDONED = 'gh-issues: $.process.run(gh) aborted: the dispatch was abandoned'
@@ -78,4 +78,8 @@ test('a cut is told apart from any other failure, Error or not', () => {
 
   expect(otherwise([])(new Error('spawn gh ENOENT'))).toEqual([])
   expect(() => otherwise([])(new Error(ABANDONED))).toThrow('aborted')
+
+  // A dropped draw passes quietly; a real failure is still raised.
+  expect(ifDropped(new Error(ABANDONED))).toBeUndefined()
+  expect(() => ifDropped(new Error('spawn gh ENOENT'))).toThrow('ENOENT')
 })

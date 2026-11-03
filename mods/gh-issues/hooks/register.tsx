@@ -25,7 +25,7 @@ import {
   remoteRepo,
 } from './github'
 import type { RawDetail, RawIssue } from './github'
-import { isAbandoned, messageOf, otherwise, shared } from './shared'
+import { ifDropped, isAbandoned, messageOf, otherwise, shared } from './shared'
 
 const PANE = 'issues'
 const TITLE = 'Issues'
@@ -42,15 +42,20 @@ const DETAIL_ROOM = 60_000
 // A command Claude runs that can change an issue: the pane reads GitHub again.
 const GH_WRITES = /\bgh(?:\.exe)?\s+(?:issue|pr)\b/
 const ROOT_COLOR = '#bb9af7'
+// The line between the chat and the sheet: the list's guide color.
+const RULE_COLOR = '#565f89'
 
 const collapsed = atom({ plugin: 'gh-issues', key: 'collapsed' } as const, [], {
   shape: 'collapsed-1',
 })
+// `filter-2` added the query: a filter stored before it reads as the default.
 const filter = atom(
   { plugin: 'gh-issues', key: 'filter' } as const,
-  { state: 'open', mine: false },
-  { shape: 'filter-1' },
+  { state: 'open', mine: false, query: '' },
+  { shape: 'filter-2' },
 )
+// GitHub cuts a search at 256 characters.
+const MAX_QUERY = 256
 const opened = atom({ plugin: 'gh-issues', key: 'opened' } as const, null, {
   shape: 'opened-1',
 })
@@ -89,7 +94,9 @@ export const register: Register = on => {
   on('session.start', async ($, e, next) => {
     await $.command.register({
       name: 'issues',
-      description: "Toggle the pane of GitHub issues of this folder's projects",
+      description:
+        "Toggle the pane of GitHub issues of this folder's projects, or open it on a search (assignee:@me label:bug)",
+      argumentHint: '[search]',
     })
     // Unasked, the pane opens only where there are issues to show; the
     // projects are found after the session starts, so it never waits on git.
@@ -107,7 +114,16 @@ export const register: Register = on => {
     return next(e)
   })
 
-  on('command.run', { command: 'issues' }, async $ => {
+  on('command.run', { command: 'issues' }, async ($, e) => {
+    // `/issues assignee:@me` opens the pane on that search, shown or not.
+    const query = queryOf(e.args)
+    if (query !== '') {
+      await update($, filter, now => ({ ...now, query }))
+      await update($, isDismissed, () => false)
+      await $.ui.open({ id: PANE, title: TITLE, columns: WIDTH, focus: true })
+
+      return { text: `Issues pane opened on the search ${query}. / in the pane changes it.` }
+    }
     const isShown = (await $.ui.panes()).some(pane => pane.id === PANE && pane.isShown)
     if (isShown) {
       await $.ui.close({ id: PANE })
@@ -121,8 +137,12 @@ export const register: Register = on => {
   })
 
   // Neither hook judges anything: a failure lets the close or the call go on.
+  // Closed, the pane takes the sheet of its open issue with it.
   on('ui.close', { id: PANE }, async ($, e, next) => {
-    if (e.origin.kind !== 'unload') await update($, isDismissed, () => true)
+    if (e.origin.kind !== 'unload') {
+      await update($, isDismissed, () => true)
+      await update($, opened, () => null)
+    }
 
     return next(e)
   }).catch(($, e, next) => next(e))
@@ -142,10 +162,75 @@ export const register: Register = on => {
     return next(e)
   })
 
-  on('ui.render', { component: 'Pane', requestId: PANE }, async ($, e) => {
-    const props = await propsOf($, e.props.bodyColumns, e.props.scroll.bodyRows)
+  // The open issue, wide, in the band above the prompt: a sheet over the
+  // bottom of the chat with the issue's Markdown and what to do with it.
+  on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
+    const open = await read($, opened)
+    if (open === null || e.props.hasSurvey) return next(e)
+    // A draw the engine dropped for a newer one passes, saying nothing.
+    const projects = await projectsOf($).catch(ifDropped)
+    if (projects === undefined || !projects.some(one => one.repo === open.repo)) return next(e)
+    const [viewing, now] = await Promise.all([viewOf($, open).catch(ifDropped), $.clock.now()])
+    if (viewing === undefined) return next(e)
+    const { Box, Text, Button, Markdown } = $.ui.resolve(e)
+    const press = (message: IssuesMessage) => () => act($, message, projects, e.surface)
+    // Each action is its key in brackets, `[ c ]`, and its name beside it:
+    // the terminal draws a Button's label in brackets, never its hotkey.
+    const actions: { key: string; hotkey: string; name: string; message: IssuesMessage }[] = [
+      { key: 'sheet-send', hotkey: 'c', name: 'Send to Claude', message: { op: 'send', ...open } },
+      { key: 'sheet-fill', hotkey: 'i', name: 'Fill prompt', message: { op: 'fill', ...open } },
+      { key: 'sheet-agent', hotkey: 'a', name: 'Agent', message: { op: 'agent', ...open } },
+      { key: 'sheet-browse', hotkey: 'b', name: 'Browser', message: { op: 'browse', ...open } },
+      { key: 'sheet-close', hotkey: 'x', name: 'Close', message: { op: 'back' } },
+    ]
+    const label = ` ${open.repo}#${open.number} `
+    const rule = `──${label}${'─'.repeat(Math.max(0, e.props.bodyColumns - label.length - 2))}`
 
-    if (e.surface === 'terminal' || e.surface === 'desktop') {
+    return (
+      <Box flexDirection="column">
+        <Text color={RULE_COLOR}>{rule}</Text>
+        <Box flexDirection="row" flexWrap="wrap" columnGap={3}>
+          {actions.map(action => (
+            <Box flexDirection="row">
+              <Button
+                key={action.key}
+                hotkey={action.hotkey}
+                variant={action.hotkey === 'c' ? 'primary' : undefined}
+                role={action.hotkey === 'x' ? 'dismiss' : undefined}
+                onPress={press(action.message)}
+              >
+                {action.hotkey}
+              </Button>
+              <Text>{` ${action.name}`}</Text>
+            </Box>
+          ))}
+        </Box>
+        <Box marginTop={1}>
+          {'detail' in viewing ? (
+            <Markdown text={markdownOf(detailOf(viewing.detail, open.repo, now, DETAIL_ROOM))} />
+          ) : (
+            <Text color="error">{`Could not read ${open.repo}#${open.number}: ${viewing.error}`}</Text>
+          )}
+        </Box>
+      </Box>
+    )
+  })
+
+  on('ui.render', { component: 'Pane', requestId: PANE }, async ($, e) => {
+    // The band above the prompt is drawn where a Client is: there the sheet
+    // shows the open issue, and elsewhere the pane does.
+    const withSheet = e.surface === 'terminal' || e.surface === 'desktop'
+    const props = await propsOf($, e.props.bodyColumns, e.props.scroll.bodyRows, withSheet).catch(
+      ifDropped,
+    )
+    // Dropped for a newer draw: what this one returns is never drawn.
+    if (props === undefined) {
+      const { Box } = $.ui.resolve(e)
+
+      return <Box />
+    }
+
+    if (withSheet) {
       const { Client } = $.ui.resolve(e)
 
       return (
@@ -232,10 +317,15 @@ export const register: Register = on => {
   })
 }
 
+/**
+ * What the pane draws. `withSheet`: the open issue shows in the sheet above
+ * the prompt and the pane stays the list, marking it; else the pane shows it.
+ */
 async function propsOf(
   $: EngineInterface,
   width: number,
   height: number,
+  withSheet: boolean,
 ): Promise<IssuesProps> {
   const [shut, shown, open, root, now] = await Promise.all([
     read($, collapsed),
@@ -245,10 +335,11 @@ async function propsOf(
     $.clock.now(),
   ])
   const projects = await projectsOf($)
-  const base = { root: rootLabel(root), filter: shown, width, height }
   const project = open === null ? undefined : projects.find(one => one.repo === open.repo)
+  const shownOpen = project === undefined ? null : open
+  const base = { root: rootLabel(root), filter: shown, open: shownOpen, width, height }
 
-  if (open !== null && project !== undefined) {
+  if (!withSheet && open !== null && project !== undefined) {
     const viewing = await viewOf($, open)
     const issue: IssueDetail | null =
       'detail' in viewing ? detailOf(viewing.detail, open.repo, now, DETAIL_ROOM) : null
@@ -349,6 +440,9 @@ async function act(
     case 'toggleMine':
       await update($, filter, now => ({ ...now, mine: !now.mine }))
       break
+    case 'query':
+      await update($, filter, now => ({ ...now, query: message.text }))
+      break
     case 'refresh':
       await bump($)
       break
@@ -446,7 +540,7 @@ async function listingOf(
 ): Promise<Listing> {
   const { listings } = await readsOf($)
 
-  return shared(listings, `${repo}|${shown.state}|${shown.mine}`, () =>
+  return shared(listings, `${repo}|${shown.state}|${shown.mine}|${shown.query}`, () =>
     readListing($, repo, shown),
   )
 }
@@ -510,6 +604,8 @@ async function readListing(
     '--limit', String(LIMIT),
     '--json', LIST_FIELDS,
     ...(shown.mine ? ['--assignee', '@me'] : []),
+    // GitHub's search syntax; an `is:open` or `is:closed` in it outranks --state.
+    ...(shown.query !== '' ? ['--search', shown.query] : []),
   ]
   const ran = await run($, argv)
   if ('error' in ran) return ran
@@ -556,7 +652,7 @@ async function run(
 // agent in a folder of its choosing.
 function parseMessage(data: unknown, projects: readonly Project[]): IssuesMessage | undefined {
   if (typeof data !== 'object' || data === null) return undefined
-  const { op, dir, repo, number, as } = data as Record<string, unknown>
+  const { op, dir, repo, number, as, text } = data as Record<string, unknown>
   const isProject = (value: unknown): value is string =>
     typeof value === 'string' && projects.some(one => one.repo !== '' && one.dir === value)
   const isRepo = (value: unknown): value is string =>
@@ -585,9 +681,19 @@ function parseMessage(data: unknown, projects: readonly Project[]): IssuesMessag
       return isRepo(repo) && isIssueNumber(number) && (as === 'number' || as === 'url')
         ? { op, repo, number, as }
         : undefined
+    // Any text: it reaches gh as one argument of its own, never a shell.
+    case 'query':
+      return typeof text === 'string' ? { op, text: queryOf(text) } : undefined
     default:
       return undefined
   }
+}
+
+/** A search as typed, on one line, without control characters, cut to GitHub's length. */
+function queryOf(text: string): string {
+  const line = text.replace(/[\u0000-\u001f\u007f-\u009f]+/g, ' ').replace(/\s+/g, ' ').trim()
+
+  return [...line].slice(0, MAX_QUERY).join('')
 }
 
 function commandOf(e: { tool: string }): string {
@@ -602,6 +708,7 @@ function nextState(state: IssueFilter['state']): IssueFilter['state'] {
 }
 
 function noneText(shown: IssueFilter): string {
+  if (shown.query !== '') return 'No issues match the search'
   const which = shown.state === 'all' ? 'No issues' : `No ${shown.state} issues`
 
   return shown.mine ? `${which} assigned to you` : which

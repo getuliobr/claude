@@ -217,11 +217,18 @@ export function markdownOf(issue: IssueDetail): string {
     `@${issue.author} opened ${agoOf(issue.age)}`,
     ...(issue.labels.length > 0 ? [issue.labels.map(label => `\`${label}\``).join(' ')] : []),
   ].join(' · ')
-  const parts = [`## ${issue.title} #${issue.number}`, meta, issue.body === '' ? '_No description._' : issue.body]
+  const parts = [
+    `## ${issue.title} · ${issue.repo}#${issue.number}`,
+    meta,
+    issue.body === '' ? '_No description._' : issue.body,
+  ]
+  if (issue.isBodyCut) parts.push('_The rest of the description is left out: open the issue in the browser._')
   for (const comment of issue.comments) {
     parts.push('---', `**@${comment.author}** · ${agoOf(comment.age)}`, comment.body)
   }
-  if (issue.omitted > 0) parts.push(`_${countOf(issue.omitted, 'comment')} left out._`)
+  if (issue.omitted > 0) {
+    parts.push(`_${countOf(issue.omitted, 'comment')} left out: open the issue in the browser._`)
+  }
 
   return parts.join('\n\n')
 }

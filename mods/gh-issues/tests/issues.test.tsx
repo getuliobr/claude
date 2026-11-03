@@ -1,5 +1,5 @@
 import { expect, mock, test } from 'claude-code/testing'
-import type { TestBody } from 'claude-code/testing'
+import type { Mounted, TestBody } from 'claude-code/testing'
 import type { FsEntry } from 'claude-code'
 
 const PANE = {
@@ -151,12 +151,45 @@ function engine(on: On, setup: Setup = {}) {
     return { value: { isCopied: true } }
   })
   on('ui.toast', () => ({ value: undefined }))
+  // The engine's own band above the prompt, drawn where the mod passes.
+  on('ui.render', { component: 'AbovePrompt' }, ($, e) => {
+    const { Text } = $.ui.resolve(e)
+
+    return <Text>engine band</Text>
+  })
 
   return { clock, lists, viewed, remoteIn, submitted, filled, spawned, copied }
 }
 
 function mount<S extends 'terminal' | 'desktop' | 'vscode' | 'mobile'>($: Engine, surface: S) {
   return $.ui.mount({ ...PANE, surface })
+}
+
+const BAND = {
+  plugin: 'gh-issues',
+  component: 'AbovePrompt',
+  requestId: 'band',
+  props: {
+    hasSurvey: false,
+    isWorking: false,
+    maxRows: 20,
+    bodyColumns: 100,
+    scroll: { offset: 0, bodyRows: 19 },
+    view: {},
+  },
+} as const
+
+/** The band above the prompt: the engine's own line (see engine()) where the mod passes. */
+function sheet<S extends 'terminal' | 'desktop'>($: Engine, surface: S) {
+  return $.ui.mount({ ...BAND, surface })
+}
+
+async function sheetText<S extends 'terminal' | 'desktop'>(
+  band: Mounted<S, 'AbovePrompt'>,
+): Promise<string | undefined> {
+  const markdown = await band.find({ type: 'Markdown' })
+
+  return markdown === undefined ? undefined : String(markdown.props.text)
 }
 
 test('a folder of two projects lists the issues of each', async ($, on) => {
@@ -206,28 +239,70 @@ test('a project off GitHub runs no gh, and a second clone is listed once', async
   await ui.unmount()
 })
 
-test('Enter opens an issue, h comes back to the same row', async ($, on) => {
+test('Enter shows an issue in the sheet above the prompt, x puts it away', async ($, on) => {
   const { viewed } = engine(on)
   for (const surface of ['terminal', 'desktop'] as const) {
     const ui = await mount($, surface)
+    const band = await sheet($, surface)
+    expect(await band.find({ type: 'Text', text: 'engine band' })).toBeDefined()
+
     await ui.key({ key: 'j', in: 'issues' })
     await ui.key({ key: 'return', in: 'issues' })
-
-    expect(await ui.find({ type: 'Text', text: 'Login breaks on Safari', in: 'issues' })).toBeDefined()
-    expect(await ui.find({ type: 'Text', text: '## Steps', in: 'issues' })).toBeDefined()
+    const text = (await sheetText(band)) ?? ''
+    expect(text).toContain('## Login breaks on Safari · acme/backend#42')
+    expect(text).toContain('**Open** · @alice opened 4d ago · `bug`')
     // Windows line ends from GitHub leave no `\r` behind.
-    expect(await ui.find({ type: 'Text', text: 'Second line', in: 'issues' })).toBeDefined()
-    expect(await ui.find({ type: 'Text', text: /@bob · 1d/, in: 'issues' })).toBeDefined()
-    expect(await ui.find({ type: 'Text', text: 'I can reproduce it.', in: 'issues' })).toBeDefined()
-    // A blank line, before the comment, is a space: an empty Text takes no row.
-    expect(await ui.find({ type: 'Text', text: ' ', in: 'issues' })).toBeDefined()
-    expect(await ui.find({ type: 'Text', text: /ISSUE/, in: 'issues' })).toBeDefined()
-
-    await ui.key({ key: 'h', in: 'issues' })
+    expect(text).toContain('## Steps\nOpen the login page\nSecond line')
+    expect(text).toContain('**@bob** · 1d ago\n\nI can reproduce it.')
+    // A line parts the sheet from the chat; each action is its key in brackets.
+    expect(await band.find({ type: 'Text', text: /^── acme\/backend#42 ─+$/ })).toBeDefined()
+    expect((await band.find({ type: 'Button', key: 'sheet-send' }))?.text).toBe('c')
+    expect(await band.find({ type: 'Text', text: ' Send to Claude' })).toBeDefined()
+    // The pane stays the list, its cursor where it was, the issue marked.
     expect((await ui.find({ type: 'Text', text: '#42 ', in: 'issues' }))?.props.backgroundColor).toBe(CURSOR)
+    expect(await ui.find({ type: 'Text', text: ' ◆', in: 'issues' })).toBeDefined()
+
+    await ui.key({ key: 'x', in: 'issues' })
+    expect(await sheetText(band)).toBeUndefined()
+    expect(await band.find({ type: 'Text', text: 'engine band' })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: ' ◆', in: 'issues' })).toBeUndefined()
+
+    // Enter on the shown issue puts it away too, and q does before it closes the pane.
+    await ui.key({ key: 'return', in: 'issues' })
+    expect(await sheetText(band)).toBeDefined()
+    await ui.key({ key: 'return', in: 'issues' })
+    expect(await sheetText(band)).toBeUndefined()
+    await ui.key({ key: 'return', in: 'issues' })
+    await ui.key({ key: 'q', in: 'issues' })
+    expect(await sheetText(band)).toBeUndefined()
+    expect(await ui.find({ type: 'Text', text: /NORMAL/, in: 'issues' })).toBeDefined()
+    await band.unmount()
     await ui.unmount()
   }
   expect(viewed).toContain('acme/backend#42')
+})
+
+test('the sheet’s buttons send the issue, fill the prompt, start an agent and close', async ($, on) => {
+  const { submitted, filled, spawned } = engine(on)
+  const ui = await mount($, 'terminal')
+  const band = await sheet($, 'terminal')
+  await ui.key({ key: 'j', in: 'issues' })
+  await ui.key({ key: 'return', in: 'issues' })
+
+  await band.press({ key: 'sheet-send' })
+  expect(submitted.at(-1)).toContain('Work on GitHub issue acme/backend#42.')
+  await band.press({ key: 'sheet-fill' })
+  expect(filled.at(-1)).toContain('gh issue view 42 --repo acme/backend --comments')
+  await band.press({ key: 'sheet-agent' })
+  expect(spawned.at(-1)?.cwd).toBe(`${ROOT}\\backend`)
+
+  await band.press({ key: 'sheet-close' })
+  expect(await sheetText(band)).toBeUndefined()
+  expect(await ui.find({ type: 'Text', text: ' ◆', in: 'issues' })).toBeUndefined()
+  // Closed from the sheet, the list says nothing more about it.
+  expect(await ui.find({ type: 'Text', text: /opening/, in: 'issues' })).toBeUndefined()
+  await band.unmount()
+  await ui.unmount()
 })
 
 test('c sends the issue to Claude, i fills the prompt, a starts a subagent', async ($, on) => {
@@ -276,6 +351,66 @@ test('s cycles the state and m keeps only issues assigned to me', async ($, on) 
 
   await ui.key({ key: 'm', in: 'issues' })
   expect(lists.at(-1)).toEqual(expect.arrayContaining(['--assignee', '@me']))
+  await ui.unmount()
+})
+
+test('/ types a search on the bottom line, Enter lists by it', async ($, on) => {
+  const { lists } = engine(on)
+  for (const surface of ['terminal', 'desktop'] as const) {
+    const ui = await mount($, surface)
+    await ui.key({ key: '/', in: 'issues' })
+    // Every key is typed, the ones the list takes for itself (g, b, q) too.
+    for (const typed of 'assignee:@me label:bug') {
+      await ui.key({ key: typed === ' ' ? 'space' : typed, in: 'issues' })
+    }
+    expect(await ui.find({ type: 'Text', text: '/assignee:@me label:bug', in: 'issues' })).toBeDefined()
+    await ui.key({ key: 'backspace', in: 'issues' })
+    await ui.key({ key: 'g', in: 'issues' })
+    await ui.key({ key: 'return', in: 'issues' })
+
+    expect(lists.at(-1)).toEqual(expect.arrayContaining(['--search', 'assignee:@me label:bug']))
+    expect(await ui.find({ type: 'Text', text: '  /assignee:@me label:bug', in: 'issues' })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: /NORMAL/, in: 'issues' })).toBeDefined()
+
+    // Ctrl-u clears the line, and an empty search lists everything again.
+    await ui.key({ key: '/', in: 'issues' })
+    await ui.key({ key: 'u', ctrl: true, in: 'issues' })
+    await ui.key({ key: 'return', in: 'issues' })
+    expect(await ui.find({ type: 'Text', text: /^ {2}\//, in: 'issues' })).toBeUndefined()
+    expect(await ui.find({ type: 'Text', text: /^Dark mode/, in: 'issues' })).toBeDefined()
+
+    // Backspace on an empty line puts it away, searching nothing.
+    const asked = lists.length
+    await ui.key({ key: '/', in: 'issues' })
+    await ui.key({ key: 'backspace', in: 'issues' })
+    expect(await ui.find({ type: 'Text', text: /NORMAL/, in: 'issues' })).toBeDefined()
+    expect(lists.length).toBe(asked)
+    await ui.unmount()
+  }
+})
+
+test('/issues with a search opens the pane on it', async ($, on) => {
+  const { lists } = engine(on)
+  on('ui.open', () => ({ value: { isPlaced: true } }))
+  await $.command.run({
+    command: 'issues',
+    args: '  label:bug \n is:open ',
+    origin: { kind: 'composer' },
+    presentation: { isFullscreen: true, columns: 200 },
+  })
+  const ui = await mount($, 'terminal')
+  expect(lists.at(-1)).toEqual(expect.arrayContaining(['--search', 'label:bug is:open']))
+  expect(await ui.find({ type: 'Text', text: '  /label:bug is:open', in: 'issues' })).toBeDefined()
+  await ui.unmount()
+})
+
+test('a posted search is one line, cut to what GitHub takes', async ($, on) => {
+  const { lists } = engine(on)
+  const ui = await mount($, 'terminal')
+  await ui.post({ op: 'query', text: `label:bug\u0007\n${'x'.repeat(400)}` }, { in: 'issues' })
+  const search = lists.at(-1)?.[(lists.at(-1)?.indexOf('--search') ?? -2) + 1] ?? ''
+  expect(search.startsWith('label:bug x')).toBe(true)
+  expect([...search].length).toBe(256)
   await ui.unmount()
 })
 
@@ -328,11 +463,14 @@ test('a long issue is cut to fit and says so', async ($, on) => {
     },
   })
   const ui = await mount($, 'terminal')
+  const band = await sheet($, 'terminal')
   await ui.key({ key: 'j', in: 'issues' })
   await ui.key({ key: 'return', in: 'issues' })
-  await ui.key({ key: 'G', in: 'issues' })
-  expect(await ui.find({ type: 'Text', text: /the rest is left out/, in: 'issues' })).toBeDefined()
-  expect(await ui.find({ type: 'Text', text: /2 comments left out/, in: 'issues' })).toBeDefined()
+  const text = (await sheetText(band)) ?? ''
+  expect(text.length).toBeLessThan(65_000)
+  expect(text).toContain('The rest of the description is left out')
+  expect(text).toContain('2 comments left out')
+  await band.unmount()
   await ui.unmount()
 })
 
@@ -348,7 +486,7 @@ test('without a Client the rows are buttons and the issue is Markdown', async ($
 
     await ui.press({ key: 'acme/backend#42' })
     const markdown = await ui.find({ type: 'Markdown' })
-    expect(String(markdown?.props.text)).toContain('## Login breaks on Safari #42')
+    expect(String(markdown?.props.text)).toContain('## Login breaks on Safari · acme/backend#42')
     expect(String(markdown?.props.text)).toContain('I can reproduce it.')
 
     await ui.press({ key: 'back' })

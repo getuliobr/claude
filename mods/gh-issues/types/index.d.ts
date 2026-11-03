@@ -1,7 +1,10 @@
 export type IssueState = 'open' | 'closed' | 'all'
 
-/** Which issues each project lists: by state, and only those assigned to you. */
-export type IssueFilter = { state: IssueState; mine: boolean }
+/**
+ * Which issues each project lists: by state, only those assigned to you, and
+ * a query in GitHub's search syntax (`assignee:@me label:bug`), `''` for none.
+ */
+export type IssueFilter = { state: IssueState; mine: boolean; query: string }
 
 /** An issue as GitHub names it: `owner/repo` and its number. */
 export type IssueRef = { repo: string; number: number }
@@ -71,9 +74,14 @@ export type IssuesProps = {
   /** The session's root folder, by name. */
   root: string
   filter: IssueFilter
-  /** The list's rows; empty while an issue is open. */
+  /**
+   * The open issue. Where the sheet above the prompt shows it, the pane stays
+   * the list and marks its row; elsewhere the pane shows it (`mode: 'issue'`).
+   */
+  open: IssueRef | null
+  /** The list's rows; empty while the pane shows an issue. */
   rows: ListRow[]
-  /** The open issue, and its contents unless reading it failed. */
+  /** The issue the pane shows, and its contents unless reading it failed. */
   ref: IssueRef | null
   issue: IssueDetail | null
   /** Why `issue` is null while one is open. */
@@ -90,6 +98,7 @@ export type IssuesMessage =
   | { op: 'toggle' | 'expand' | 'collapse'; dir: string }
   | { op: IssueAction; repo: string; number: number }
   | { op: 'copy'; repo: string; number: number; as: 'number' | 'url' }
+  | { op: 'query'; text: string }
   | { op: 'back' | 'refresh' | 'cycleState' | 'toggleMine' | 'collapseAll' | 'quit' }
 
 declare module 'claude-code' {
