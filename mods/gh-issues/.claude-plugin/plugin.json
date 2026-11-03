@@ -1,0 +1,8 @@
+{
+  "name": "gh-issues",
+  "version": "0.1.0",
+  "description": "A Neovim-style pane of the GitHub issues of every project in the session's folder: read them in place and hand them to Claude",
+  "author": { "name": "getuliobr" },
+  "license": "MIT",
+  "types": "./types/index.d.ts"
+}
