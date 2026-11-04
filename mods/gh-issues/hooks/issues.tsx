@@ -8,7 +8,7 @@ import type {
 
 import type { IssueRef, IssuesMessage, IssuesProps, ListRow } from '../types'
 
-// tokyonight (night), the palette nvim-explorer draws in.
+// tokyonight (night), the palette FileTree draws in.
 const COLOR = {
   fg: '#c0caf5',
   muted: '#565f89',

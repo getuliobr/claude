@@ -1,6 +1,6 @@
 {
-  "name": "nvim-explorer",
-  "version": "0.1.0",
+  "name": "file-tree",
+  "version": "0.2.0",
   "description": "A Neovim-style file tree pane beside the chat: nvim-tree look, hjkl keys, git marks",
   "author": { "name": "getuliobr" },
   "license": "MIT",

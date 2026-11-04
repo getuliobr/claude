@@ -10,7 +10,15 @@ Turn a visual idea into artwork that survives exports and conversational edits.
 ## Establish the visual
 
 - Use the user's image when supplied. When starting from a description, generate a visual concept using the available image-generation capability and its applicable instructions, then inspect the result. Do not generate another concept for every small edit.
-- If image generation is unavailable, say so and build a code-native draft; do not claim the image-generation step happened.
+- If your own tools cannot generate images (for example in Claude Code or another agent) and the `codex` CLI is installed, delegate only the concept image to Codex, then view the saved file yourself:
+
+  ```bash
+  codex exec --skip-git-repo-check -s workspace-write -C /absolute/work/dir \
+    "Use your image generation tool to create one <aspect ratio> diagram concept and save it as concept.png in the current directory. Do not write code. <exact wording, connections, language and style>"
+  ```
+
+  Spell out every label and connection in the prompt. Codex can still invent or misplace details, so correct them in the rebuild.
+- If neither your tools nor Codex can generate images, say so and build a code-native draft; do not claim the image-generation step happened.
 - Treat user-specified wording, connections, and content as authoritative over generated pixels. Correct image-generation mistakes instead of transcribing them.
 - Distinguish **match the reference** (preserve composition and proportions) from **improve the design** (allow rearrangement). Infer from the request; clarify only when this changes the outcome materially.
 - Preserve an existing artifact's aspect ratio and approved choices. For a new slide asset, use generous margins and a composition suited to the requested slide size. Do not invent content to fill the canvas.

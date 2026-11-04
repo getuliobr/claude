@@ -1,6 +1,6 @@
 # gh-issues
 
-A Claude Code mod that keeps the GitHub issues of your projects docked beside the chat, drawn like nvim-explorer's tree: one folder per project, its issues under it, a cursorline and a lualine-style status bar. Open an issue and it shows in a sheet above the prompt, as wide as the chat, with its description and comments rendered as Markdown. Then hand it to Claude: in the conversation, in the prompt box for you to add to, or to a subagent working in the background.
+A Claude Code mod that keeps the GitHub issues of your projects docked beside the chat, drawn like FileTree's: one folder per project, its issues under it, a cursorline and a lualine-style status bar. Open an issue and it shows in a sheet above the prompt, as wide as the chat, with its description and comments rendered as Markdown. Then hand it to Claude: in the conversation, in the prompt box for you to add to, or to a subagent working in the background.
 
 ```text
 work
@@ -18,7 +18,7 @@ It needs the [GitHub CLI](https://cli.github.com/), signed in: `gh auth status` 
 
 ## Use it
 
-The pane opens by itself when the session's folder holds a GitHub project, the terminal is wide enough (144 columns, or 110 once you have opened it before) and Claude Code is in fullscreen mode. `/issues` opens or closes it at any width. With nvim-explorer loaded too, the two panes share the dock as tabs.
+The pane opens by itself when the session's folder holds a GitHub project, the terminal is wide enough (144 columns, or 110 once you have opened it before) and Claude Code is in fullscreen mode. `/issues` opens or closes it at any width. With FileTree loaded too, the two panes share the dock as tabs.
 
 Click the pane once to give it the keyboard, then in the list:
 

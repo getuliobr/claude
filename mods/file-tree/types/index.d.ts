@@ -46,7 +46,7 @@ export type TreeMessage =
 
 declare module 'claude-code' {
   interface PluginState {
-    'nvim-explorer': {
+    'file-tree': {
       expanded: Shaped<string[]>
       filters: Shaped<ExplorerFilters>
       /** Bumped to re-read the disk and git. */
