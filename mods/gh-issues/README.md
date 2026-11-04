@@ -28,10 +28,11 @@ Click the pane once to give it the keyboard, then in the list:
 | `gg` `G`, Home End | top / bottom |
 | `Ctrl-f`, PageDown / PageUp | page down / up |
 | `Ctrl-u` | half page up |
-| `l` `Enter` `o` | open a project; on an issue, show it in the sheet above the prompt |
-| `x` | put the sheet away; `Enter` on the issue it shows does too |
+| `l` | open a project; on an issue, show it in the sheet above the prompt |
+| `Enter` `o` | open or close a project, as nvim-tree's do; on an issue, show it, or put it away when the sheet already shows it |
+| `x` | put the sheet away |
 | `h` | close a project, or go to it from one of its issues |
-| `Backspace` | close the project the cursor is in |
+| `Backspace` | close the project the cursor is on or in |
 | `K` `J`, `P` | first / last sibling, the project above |
 | `/` | search, as GitHub's own search box reads it (see below) |
 | `s` | list open, then closed, then all issues |

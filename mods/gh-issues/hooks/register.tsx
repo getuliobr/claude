@@ -37,10 +37,14 @@ const LIMIT = 50
 // Issues live on the network: read them again every five minutes, not seconds.
 const REFRESH_MS = 300_000
 const GH_TIMEOUT_MS = 20_000
-// A Client's props are capped at 100,000 characters serialized.
+// How much of an issue's description and comments the sheet draws, in
+// characters: past it, the rest is left to the browser.
 const DETAIL_ROOM = 60_000
 // A command Claude runs that can change an issue: the pane reads GitHub again.
-const GH_WRITES = /\bgh(?:\.exe)?\s+(?:issue|pr)\b/
+// A read changes nothing, and Claude runs `gh issue view` for every issue the
+// pane hands it, so `view`, `list` and `status` read nothing again.
+const GH_WRITES =
+  /\bgh(?:\.exe)?\s+(?:issue\s+(?:create|new|edit|close|reopen|comment|delete|transfer|pin|unpin|lock|unlock|develop)|pr\s+(?:create|new|merge|close|reopen|edit))\b/
 const ROOT_COLOR = '#bb9af7'
 // The line between the chat and the sheet: the list's guide color.
 const RULE_COLOR = '#565f89'
@@ -136,6 +140,15 @@ export const register: Register = on => {
     return { text: 'Issues pane opened. Click it for hjkl keys, ? for help.' }
   })
 
+  // The sheet draws only beside a drawn pane, which is no state a draw can
+  // read: opened, the pane has the band drawn again, its issue's sheet too.
+  on('ui.open', { id: PANE }, async ($, e, next) => {
+    const result = await next(e)
+    $.ui.invalidate('ui.render')
+
+    return result
+  }).catch(($, e, next) => next(e))
+
   // Neither hook judges anything: a failure lets the close or the call go on.
   // Closed, the pane takes the sheet of its open issue with it.
   on('ui.close', { id: PANE }, async ($, e, next) => {
@@ -160,6 +173,11 @@ export const register: Register = on => {
     if (message !== undefined) await act($, message, projects, e.surface)
 
     return next(e)
+  }).catch(($, e, next) => {
+    // A key that failed says why in a toast, not as a hook error.
+    sayFailed($, next.error.message)
+
+    return next(e)
   })
 
   // The open issue, wide, in the band above the prompt: a sheet over the
@@ -167,13 +185,17 @@ export const register: Register = on => {
   on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
     const open = await read($, opened)
     if (open === null || e.props.hasSurvey) return next(e)
+    // The sheet goes with the list: a pane closed, or waiting undrawn on a
+    // narrow terminal, leaves the chat without an issue over it.
     // A draw the engine dropped for a newer one passes, saying nothing.
+    const panes = await $.ui.panes().catch(ifDropped)
+    if (!panes?.some(pane => pane.id === PANE && pane.isPlaced)) return next(e)
     const projects = await projectsOf($).catch(ifDropped)
     if (projects === undefined || !projects.some(one => one.repo === open.repo)) return next(e)
     const [viewing, now] = await Promise.all([viewOf($, open).catch(ifDropped), $.clock.now()])
     if (viewing === undefined) return next(e)
     const { Box, Text, Button, Markdown } = $.ui.resolve(e)
-    const press = (message: IssuesMessage) => () => act($, message, projects, e.surface)
+    const press = (message: IssuesMessage) => () => pressed($, message, projects, e.surface)
     // Each action is its key in brackets, `[ c ]`, and its name beside it:
     // the terminal draws a Button's label in brackets, never its hotkey.
     const actions: { key: string; hotkey: string; name: string; message: IssuesMessage }[] = [
@@ -246,8 +268,9 @@ export const register: Register = on => {
 
     // No Client on this surface: rows to press, and the issue as Markdown.
     const { Box, Text, Button, Markdown } = $.ui.resolve(e)
-    const projects = await projectsOf($)
-    const press = (message: IssuesMessage) => () => act($, message, projects, e.surface)
+    const projects = await projectsOf($).catch(ifDropped)
+    if (projects === undefined) return <Box />
+    const press = (message: IssuesMessage) => () => pressed($, message, projects, e.surface)
     const { ref, issue } = props
 
     if (props.mode === 'issue' && ref !== null) {
@@ -504,6 +527,21 @@ async function act(
       break
     }
   }
+}
+
+/** A Button's press: what failed says why in a toast, as a key's does. */
+async function pressed(
+  $: EngineInterface,
+  message: IssuesMessage,
+  projects: readonly Project[],
+  surface: RenderSurface,
+): Promise<void> {
+  await act($, message, projects, surface).catch(error => sayFailed($, messageOf(error)))
+}
+
+function sayFailed($: EngineInterface, reason: string | undefined): void {
+  const line = firstLine(reason ?? '')
+  $.ui.toast(line === '' ? 'Issues: that did not work' : `Issues: ${line}`)
 }
 
 async function bump($: EngineInterface): Promise<void> {

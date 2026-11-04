@@ -151,6 +151,14 @@ function engine(on: On, setup: Setup = {}) {
     return { value: { isCopied: true } }
   })
   on('ui.toast', () => ({ value: undefined }))
+  // Whether the pane is drawn, as `$.ui.panes()` says; a test may change it.
+  const drawn: { pane: 'placed' | 'unplaced' | 'closed' } = { pane: 'placed' }
+  on('ui.panes', () => ({
+    value:
+      drawn.pane === 'closed'
+        ? []
+        : [{ id: 'issues', title: 'Issues', isShown: true, isFocused: false, isPlaced: drawn.pane === 'placed' }],
+  }))
   // The engine's own band above the prompt, drawn where the mod passes.
   on('ui.render', { component: 'AbovePrompt' }, ($, e) => {
     const { Text } = $.ui.resolve(e)
@@ -158,7 +166,7 @@ function engine(on: On, setup: Setup = {}) {
     return <Text>engine band</Text>
   })
 
-  return { clock, lists, viewed, remoteIn, submitted, filled, spawned, copied }
+  return { clock, lists, viewed, remoteIn, submitted, filled, spawned, copied, drawn }
 }
 
 function mount<S extends 'terminal' | 'desktop' | 'vscode' | 'mobile'>($: Engine, surface: S) {
@@ -305,6 +313,45 @@ test('the sheet’s buttons send the issue, fill the prompt, start an agent and 
   await ui.unmount()
 })
 
+for (const pane of ['unplaced', 'closed'] as const) {
+  test(`an open issue draws no sheet while the pane is ${pane}`, async ($, on) => {
+    const { drawn } = engine(on)
+    on('ui.open', () => {
+      drawn.pane = 'placed'
+
+      return { value: { isPlaced: true } }
+    })
+    const ui = await mount($, 'terminal')
+    const band = await sheet($, 'terminal')
+    await ui.key({ key: 'j', in: 'issues' })
+    await ui.key({ key: 'return', in: 'issues' })
+    expect(await sheetText(band)).toBeDefined()
+
+    // The issue stays open, as a resumed session keeps it, but the list is gone.
+    drawn.pane = pane
+    await ui.key({ key: 'R', in: 'issues' })
+    expect(await sheetText(band)).toBeUndefined()
+    expect(await band.find({ type: 'Text', text: 'engine band' })).toBeDefined()
+
+    // Drawn again, the pane brings its sheet back: placed as the terminal
+    // widens, which draws the band again, or opened again with /issues.
+    if (pane === 'unplaced') {
+      drawn.pane = 'placed'
+      await band.redraw({ ...BAND.props, bodyColumns: 120 })
+    } else {
+      await $.command.run({
+        command: 'issues',
+        args: '',
+        origin: { kind: 'composer' },
+        presentation: { isFullscreen: true, columns: 200 },
+      })
+    }
+    expect(await sheetText(band)).toBeDefined()
+    await band.unmount()
+    await ui.unmount()
+  })
+}
+
 test('c sends the issue to Claude, i fills the prompt, a starts a subagent', async ($, on) => {
   const { submitted, filled, spawned } = engine(on)
   const ui = await mount($, 'terminal')
@@ -434,6 +481,28 @@ test('a gh command Claude runs reads GitHub again', async ($, on) => {
   await $.tool.call({ tool: 'Bash', command: 'gh issue close 42 --repo acme/backend' })
   await ui.find({ type: 'Text', text: /^backend$/, in: 'issues' })
   expect(lists.length).toBeGreaterThan(before)
+
+  // A read, as Claude runs for every issue the pane hands it, reads nothing again.
+  const after = lists.length
+  await $.tool.call({ tool: 'Bash', command: 'gh issue view 42 --repo acme/backend --comments' })
+  await $.tool.call({ tool: 'PowerShell', command: 'gh issue list --repo acme/backend' })
+  await ui.find({ type: 'Text', text: /^backend$/, in: 'issues' })
+  expect(lists.length).toBe(after)
+  await ui.unmount()
+})
+
+test('Backspace on a project closes it, Enter opens and closes it', async ($, on) => {
+  engine(on)
+  const ui = await mount($, 'terminal')
+  // The cursor starts on backend, the first project.
+  await ui.key({ key: 'backspace', in: 'issues' })
+  expect(await ui.find({ type: 'Text', text: /^Login breaks on Safari/, in: 'issues' })).toBeUndefined()
+  expect(await ui.find({ type: 'Text', text: /^Dark mode/, in: 'issues' })).toBeDefined()
+
+  await ui.key({ key: 'return', in: 'issues' })
+  expect(await ui.find({ type: 'Text', text: /^Login breaks on Safari/, in: 'issues' })).toBeDefined()
+  await ui.key({ key: 'return', in: 'issues' })
+  expect(await ui.find({ type: 'Text', text: /^Login breaks on Safari/, in: 'issues' })).toBeUndefined()
   await ui.unmount()
 })
 

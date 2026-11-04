@@ -56,7 +56,8 @@ const HELP: readonly (readonly [string, string])[] = [
   ['j k', 'down / up'],
   ['gg G', 'top / bottom'],
   ['^f ^u', 'page down / half up'],
-  ['<CR> l', 'open project / show issue'],
+  ['l', 'open project / show issue'],
+  ['<CR> o', 'toggle project / issue'],
   ['x', 'close the issue'],
   ['h', 'close project / parent'],
   ['K J', 'first / last sibling'],
@@ -396,9 +397,11 @@ function onKey(
         return go(index + 1)
       case 'h':
       case 'left':
+      case 'backspace':
         if (row.isOpen) return send({ op: 'collapse', dir: row.dir })
 
         return
+      // As nvim-tree's: Enter and o open a closed project and close an open one.
       case 'return':
       case 'o':
         return send({ op: 'toggle', dir: row.dir })

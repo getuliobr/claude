@@ -115,9 +115,9 @@ export function parseIssueView(stdout: string): RawDetail | undefined {
 }
 
 /**
- * An issue as the buffer draws it: ages against `now`, and the body and
- * comments, in order, up to `room` characters, since a `Client`'s props are
- * capped at 100,000 serialized.
+ * An issue as the sheet draws it: ages against `now`, and the body and
+ * comments, in order, up to `room` characters (code points, so an emoji
+ * counts once wherever it is), the rest left for the browser.
  */
 export function detailOf(raw: RawDetail, repo: string, now: number, room: number): IssueDetail {
   const points = [...raw.body]
@@ -126,8 +126,9 @@ export function detailOf(raw: RawDetail, repo: string, now: number, room: number
   let left = room - Math.min(points.length, room)
   const comments: IssueDetail['comments'] = []
   for (const comment of raw.comments) {
-    if (isBodyCut || comment.body.length > left) break
-    left -= comment.body.length
+    const length = [...comment.body].length
+    if (isBodyCut || length > left) break
+    left -= length
     comments.push({ author: comment.author, age: ageOf(comment.createdAt, now), body: comment.body })
   }
 
