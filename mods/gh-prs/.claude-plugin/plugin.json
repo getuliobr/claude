@@ -1,0 +1,8 @@
+{
+  "name": "gh-prs",
+  "version": "0.1.0",
+  "description": "A Neovim-style pane of the GitHub pull requests of every project in the session's folder: their checks, conversation and diff in place, and Claude to review or fix them",
+  "author": { "name": "getuliobr" },
+  "license": "MIT",
+  "types": "./types/index.d.ts"
+}

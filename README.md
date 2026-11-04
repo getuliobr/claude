@@ -47,6 +47,7 @@ Without a date range it covers Monday of the current week through today. It grou
 | --- | --- |
 | [FileTree](mods/file-tree/README.md) | Keep a Neovim-style file tree docked beside the chat: nvim-tree look, vim keys, git marks, and Enter to `@mention` a file. |
 | [gh-issues](mods/gh-issues/README.md) | List the GitHub issues of every project in the session's folder beside the chat, search them, read one with its comments in a sheet above the prompt, and hand it to Claude or a subagent. |
+| [gh-prs](mods/gh-prs/README.md) | List the GitHub pull requests of every project in the session's folder beside the chat with their checks, read one's conversation or diff in a sheet above the prompt, and have Claude review it or fix its feedback. |
 
 Load a mod for one session with `claude --plugin-dir mods/<mod>`. Each mod's README lists its keys and options.
 
