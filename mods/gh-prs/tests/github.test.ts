@@ -2,6 +2,7 @@ import { expect, test } from 'claude-code/testing'
 
 import {
   checksOf,
+  cutOf,
   diffViewOf,
   markdownOf,
   parseDiff,
@@ -149,6 +150,16 @@ test('an open one with conflicts says so, and a body past the room is cut', () =
   expect(text).toContain('**Approved** · **Conflicts with the base branch**')
   expect(text).toContain('_The rest of the description is left out')
   expect(text).toContain('_2 comments and reviews left out')
+})
+
+test('a description cut inside a code block closes the block, so the notes after it read as text', () => {
+  const body = ['Logs:', '', '````log', 'x'.repeat(200), '````', '', '~~~', 'y'.repeat(200), '~~~'].join('\n')
+  // The second block's text starts at 226: the room ends ten letters into it.
+  const text = markdownOf({ ...DETAIL, body, timeline: [] }, 'acme/web', NOW, 236)
+  expect(text).toContain(`${'y'.repeat(10)}…\n~~~\n\n_The rest of the description is left out`)
+  // A fence the cut leaves closed gets nothing more.
+  expect(cutOf([...body], 20)).toBe(`${body.slice(0, 20)}…\n\`\`\`\``)
+  expect(cutOf([...'```\na\n```\nmore'], 11)).toBe('```\na\n```\nm…')
 })
 
 test('gh pr view’s JSON reads into the detail, a team asked to review by its slug', () => {

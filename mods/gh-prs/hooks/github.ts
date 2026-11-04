@@ -380,7 +380,7 @@ export function markdownOf(raw: RawDetail, repo: string, now: number, room: numb
 
   const points = [...raw.body]
   const isBodyCut = points.length > room
-  parts.push(raw.body === '' ? '_No description._' : isBodyCut ? `${points.slice(0, room).join('')}…` : raw.body)
+  parts.push(raw.body === '' ? '_No description._' : isBodyCut ? cutOf(points, room) : raw.body)
   if (isBodyCut) parts.push('_The rest of the description is left out: open the pull request in the browser._')
   let left = room - Math.min(points.length, room)
   let shown = 0
@@ -400,6 +400,26 @@ export function markdownOf(raw: RawDetail, repo: string, now: number, room: numb
   }
 
   return parts.join('\n\n')
+}
+
+/**
+ * The first `room` code points of a description, an ellipsis where it was
+ * cut, and a code fence the cut left open closed again, so what follows is
+ * drawn as text, not as code.
+ */
+export function cutOf(points: readonly string[], room: number): string {
+  const head = `${points.slice(0, room).join('')}…`
+  let fence: string | undefined
+  for (const line of head.split('\n')) {
+    // A fence is three or more backticks or tildes, indented at most three
+    // spaces; it closes on a bare run of the same mark at least as long.
+    const mark = /^ {0,3}(`{3,}|~{3,})/.exec(line)?.[1]
+    if (mark === undefined) continue
+    if (fence === undefined) fence = mark
+    else if (mark[0] === fence[0] && mark.length >= fence.length && line.trim() === mark) fence = undefined
+  }
+
+  return fence === undefined ? head : `${head}\n${fence}`
 }
 
 const REVIEW_LABEL: Record<string, string> = {

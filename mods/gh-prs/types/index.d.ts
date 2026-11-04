@@ -63,6 +63,11 @@ export type ListRow =
 export type PrsProps = {
   /** The session's root folder, by name. */
   root: string
+  /**
+   * How many projects the list stopped at, where more repositories are under
+   * the root than it reads; 0 when it lists them all.
+   */
+  cap: number
   filter: PrFilter
   /** The pull request the sheet above the prompt shows, marked in the list. */
   open: PrRef | null
@@ -79,7 +84,8 @@ export type PrAction = 'open' | 'diff' | 'review' | 'fix' | 'fill' | 'agent' | '
 
 /** What the `Client` and the sheet's buttons post back. */
 export type PrsMessage =
-  | { op: 'toggle' | 'expand' | 'collapse'; dir: string }
+  /** `browseAll`: the project's pull requests on GitHub, as the list filters them. */
+  | { op: 'toggle' | 'expand' | 'collapse' | 'browseAll'; dir: string }
   | { op: PrAction; repo: string; number: number }
   | { op: 'copy'; repo: string; number: number; as: 'number' | 'url' }
   | { op: 'query'; text: string }

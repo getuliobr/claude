@@ -79,11 +79,12 @@ const HELP: readonly (readonly [string, string])[] = [
   ['x', 'close the PR'],
   ['h', 'close project / parent'],
   ['K J', 'first / last sibling'],
+  ['P', 'the project above'],
   ['c', 'Claude reviews it'],
   ['f', 'Claude fixes its feedback'],
   ['i', 'fill the prompt'],
   ['a', 'subagent reviews it'],
-  ['gx', 'open in the browser'],
+  ['gx', 'PR / project in browser'],
   ['@', 'owner/repo#n in prompt'],
   ['y Y', 'copy #n / url'],
   ['/', 'search: label:bug …'],
@@ -130,6 +131,7 @@ const Prs: ClientModule<PrsProps, View> = (props, surface) => {
         <Text color={COLOR.root} bold>
           {clip(props.root, width)}
         </Text>
+        <Text color={COLOR.muted}>{props.cap > 0 ? `  first ${props.cap}` : ''}</Text>
         <Text color={COLOR.number}>{query === '' ? '' : `  /${query}`}</Text>
       </Text>
       {body.slice(0, bodyRows)}
@@ -338,18 +340,20 @@ function onKey(
   const pr = row?.kind === 'pr' ? { repo: row.repo, number: row.number } : undefined
   const hasPr = props.open !== null
 
+  // Claude Code keeps Ctrl-d and Ctrl-b for itself: they never reach the pane.
   if (key.ctrl) {
-    if (key.key === 'd') go(index + half)
     if (key.key === 'u') go(index - half)
     if (key.key === 'f') go(index + bodyRows)
-    if (key.key === 'b') go(index - bodyRows)
 
     return
   }
   if (view.pending === 'g') {
     if (key.key === 'g') go(0)
     else if (key.key === 'x' && pr !== undefined) send({ op: 'browse', ...pr })
-    else surface.setState({ ...view, pending: '' })
+    // On a project, its pull requests on GitHub: the ones past the list's 50 too.
+    else if (key.key === 'x' && row?.kind === 'project' && row.repo !== '') {
+      send({ op: 'browseAll', dir: row.dir })
+    } else surface.setState({ ...view, pending: '' })
 
     return
   }

@@ -126,6 +126,8 @@ type Setup = {
   diffs?: Record<string, { text: string; isCut?: boolean }>
   /** Repositories whose `gh` fails, with what it writes to stderr. */
   failing?: Record<string, string>
+  /** Repositories whose `gh` call rejects, as one killed past its time does, with the error's message. */
+  throwing?: Record<string, string>
 }
 
 /** Stands for the engine beneath the mod: the disk, git, gh and the prompt. */
@@ -140,6 +142,7 @@ function engine(on: On, setup: Setup = {}) {
     views = { 'acme/backend#42': VIEW_42 },
     diffs = { 'acme/backend#42': { text: DIFF_42 } },
     failing = {},
+    throwing = {},
   } = setup
   const lists: string[][] = []
   const viewed: string[] = []
@@ -180,15 +183,20 @@ function engine(on: On, setup: Setup = {}) {
         value: { exitCode: 1, stdout: '', stderr, isStdoutTruncated: false, isStderrTruncated: false },
       }
     }
-    if (argv[0] === 'gh' && argv[2] === 'list') {
-      lists.push([...argv])
-
-      return ok(JSON.stringify((prs[repo] ?? []).map(pr => ({ state: 'OPEN', isDraft: false, ...pr }))))
-    }
-    if (argv[0] === 'gh' && argv[2] === 'view' && argv.includes('--web')) {
-      browsed.push(`${repo}#${argv[3]}`)
+    if (argv[0] === 'gh' && argv.includes('--web')) {
+      browsed.push(argv[2] === 'list' ? argv.join(' ') : `${repo}#${argv[3]}`)
 
       return ok('')
+    }
+    // A refusal beneath the plugin rejects its call, as a child killed past its time does.
+    const thrown = throwing[repo]
+    if (thrown !== undefined) return { deny: thrown }
+    if (argv[0] === 'gh' && argv[2] === 'list') {
+      lists.push([...argv])
+      const limit = Number(argv[argv.indexOf('--limit') + 1])
+      const listed = (prs[repo] ?? []).map(pr => ({ state: 'OPEN', isDraft: false, ...pr }))
+
+      return ok(JSON.stringify(listed.slice(0, limit)))
     }
     if (argv[0] === 'gh' && argv[2] === 'view') {
       viewed.push(`${repo}#${argv[3]}`)
@@ -226,12 +234,21 @@ function engine(on: On, setup: Setup = {}) {
   })
   on('ui.toast', () => ({ value: undefined }))
   // Whether the pane is drawn, as `$.ui.panes()` says; a test may change it.
-  const drawn: { pane: 'placed' | 'unplaced' | 'closed' } = { pane: 'placed' }
+  // `hidden`: a tab behind another plugin's pane in the dock.
+  const drawn: { pane: 'placed' | 'unplaced' | 'hidden' | 'closed' } = { pane: 'placed' }
   on('ui.panes', () => ({
     value:
       drawn.pane === 'closed'
         ? []
-        : [{ id: 'prs', title: 'PRs', isShown: true, isFocused: false, isPlaced: drawn.pane === 'placed' }],
+        : [
+            {
+              id: 'prs',
+              title: 'PRs',
+              isShown: drawn.pane !== 'hidden',
+              isFocused: false,
+              isPlaced: drawn.pane !== 'unplaced',
+            },
+          ],
   }))
   // The engine's own band above the prompt, drawn where the mod passes.
   on('ui.render', { component: 'AbovePrompt' }, ($, e) => {
@@ -475,7 +492,7 @@ test('the sheet’s buttons ask for a review or a fix, fill the prompt, start an
   await ui.unmount()
 })
 
-for (const pane of ['unplaced', 'closed'] as const) {
+for (const pane of ['unplaced', 'hidden', 'closed'] as const) {
   test(`an open pull request draws no sheet while the pane is ${pane}`, async ($, on) => {
     const { drawn } = engine(on)
     on('ui.open', () => {
@@ -496,8 +513,9 @@ for (const pane of ['unplaced', 'closed'] as const) {
     expect(await band.find({ type: 'Text', text: 'engine band' })).toBeDefined()
 
     // Drawn again, the pane brings its sheet back: placed as the terminal
-    // widens, which draws the band again, or opened again with /prs.
-    if (pane === 'unplaced') {
+    // widens or its tab shown again, and the band drawn again, or opened
+    // again with /prs.
+    if (pane !== 'closed') {
       drawn.pane = 'placed'
       await band.redraw({ ...BAND.props, bodyColumns: 120 })
     } else {
@@ -674,7 +692,13 @@ test('a pull request command or a push Claude runs reads GitHub again', async ($
   const { lists } = engine(on)
   on('tool.call', () => ({ result: {} }))
   const ui = await mount($, 'terminal')
-  for (const command of ['gh pr merge 42 --repo acme/backend --squash', 'git -C backend push origin fix']) {
+  for (const command of [
+    'gh pr merge 42 --repo acme/backend --squash',
+    'git -C backend push origin fix',
+    'git -c http.extraHeader=x push --force-with-lease',
+    'gh api -X POST repos/acme/backend/pulls/42/comments/7/replies -f body=Done',
+    'gh api repos/acme/backend/issues/42/comments --field body=Thanks',
+  ]) {
     const before = lists.length
     await $.tool.call({ tool: 'Bash', command })
     await ui.find({ type: 'Text', text: /^backend$/, in: 'prs' })
@@ -686,8 +710,76 @@ test('a pull request command or a push Claude runs reads GitHub again', async ($
   await $.tool.call({ tool: 'Bash', command: 'gh pr view 42 --repo acme/backend --comments' })
   await $.tool.call({ tool: 'PowerShell', command: 'gh pr diff 42 --repo acme/backend' })
   await $.tool.call({ tool: 'Bash', command: 'gh pr checkout 42 --repo acme/backend' })
+  await $.tool.call({ tool: 'Bash', command: 'gh api repos/acme/backend/pulls/42/comments' })
   await ui.find({ type: 'Text', text: /^backend$/, in: 'prs' })
   expect(lists.length).toBe(after)
+  await ui.unmount()
+})
+
+test('R looks at the folders again; a refresh after a push only reads GitHub', async ($, on) => {
+  const { lists, remoteIn } = engine(on)
+  on('tool.call', () => ({ result: {} }))
+  const ui = await mount($, 'terminal')
+  const found = remoteIn.length
+  const listed = lists.length
+  await $.tool.call({ tool: 'Bash', command: 'git push' })
+  await ui.find({ type: 'Text', text: /^backend$/, in: 'prs' })
+  expect(lists.length).toBeGreaterThan(listed)
+  expect(remoteIn.length).toBe(found)
+
+  await ui.key({ key: 'R', in: 'prs' })
+  await ui.find({ type: 'Text', text: /^backend$/, in: 'prs' })
+  expect(remoteIn.length).toBe(found * 2)
+  await ui.unmount()
+})
+
+test('a gh killed past its time says GitHub was slow, not that gh is missing', async ($, on) => {
+  engine(on, { throwing: { 'acme/web': '$.process.run(gh) timed out after 20000 ms: the child was killed' } })
+  const ui = await mount($, 'terminal')
+  // Cut to the pane's width: the start says it.
+  expect(await ui.find({ type: 'Text', text: /^GitHub took too long to answer/, in: 'prs' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /Is the GitHub CLI installed/, in: 'prs' })).toBeUndefined()
+  expect(await ui.find({ type: 'Text', text: /^Fix login on Safari/, in: 'prs' })).toBeDefined()
+  await ui.unmount()
+})
+
+test('gx on a project opens its pull requests on GitHub, as the list filters them', async ($, on) => {
+  const { browsed } = engine(on)
+  const ui = await mount($, 'terminal')
+  await ui.key({ key: 'm', in: 'prs' })
+  await ui.key({ key: 'g', in: 'prs' })
+  await ui.key({ key: 'x', in: 'prs' })
+  expect(browsed).toEqual(['gh pr list --repo acme/backend --state open --author @me --web'])
+  await ui.unmount()
+})
+
+test('a project of exactly 50 pull requests counts 50, one of more counts 50+', async ($, on) => {
+  const many = (n: number): Pr[] =>
+    Array.from({ length: n }, (_, i) => ({ number: 100 + i, title: `Change ${i}`, updatedAt: '2026-11-02T12:00:00Z' }))
+  const { lists } = engine(on, { prs: { 'acme/backend': many(50), 'acme/web': many(60) } })
+  const ui = await mount($, 'terminal')
+  await ui.key({ key: 'W', in: 'prs' })
+  expect(await ui.find({ type: 'Text', text: /^ 50$/, in: 'prs' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /^ 50\+$/, in: 'prs' })).toBeDefined()
+  expect(lists[0]).toEqual(expect.arrayContaining(['--limit', '51']))
+  await ui.unmount()
+})
+
+test('a folder of many repositories lists eight on GitHub, past clones and folders off it', async ($, on) => {
+  const remotes: Record<string, string> = {}
+  for (const name of ['a1', 'a2', 'a3', 'a4', 'a5', 'a6']) remotes[name] = `https://gitlab.com/acme/${name}.git`
+  remotes['b-clone1'] = 'https://github.com/acme/web.git'
+  remotes['b-clone2'] = 'git@github.com:acme/web.git'
+  for (const name of ['g1', 'g2', 'g3', 'g4', 'g5', 'g6', 'g7', 'g8', 'z']) {
+    remotes[name] = `https://github.com/acme/${name}.git`
+  }
+  const { lists } = engine(on, { disk: Object.keys(remotes).map(dir), remotes })
+  const ui = await mount($, 'terminal')
+  expect(await ui.find({ type: 'Text', text: '  first 8', in: 'prs' })).toBeDefined()
+  expect(new Set(lists.map(argv => argv[argv.indexOf('--repo') + 1]))).toEqual(
+    new Set(['acme/web', 'acme/g1', 'acme/g2', 'acme/g3', 'acme/g4', 'acme/g5', 'acme/g6', 'acme/g7']),
+  )
+  expect(await ui.find({ type: 'Text', text: /^a1$/, in: 'prs' })).toBeDefined()
   await ui.unmount()
 })
 

@@ -20,7 +20,7 @@ It needs the [GitHub CLI](https://cli.github.com/), signed in: `gh auth status` 
 
 ## Use it
 
-The pane opens by itself when the session's folder holds a GitHub project, the terminal is wide enough (144 columns, or 110 once you have opened it before) and Claude Code is in fullscreen mode. `/prs` opens or closes it at any width. With gh-issues or FileTree loaded too, the panes share the dock as tabs.
+The pane opens by itself when the session's folder holds a GitHub project, the terminal is wide enough (144 columns, or 110 once you have opened it before) and Claude Code is in fullscreen mode. `/prs` opens or closes it at any width. With gh-issues or FileTree loaded too, the panes share the dock as tabs, and the sheet above the prompt shows only while the PRs tab is the one in front.
 
 Click the pane once to give it the keyboard, then in the list:
 
@@ -60,10 +60,10 @@ On a pull request in the list:
 | `f` | ask Claude to fix what its reviews and failing checks found, on its branch |
 | `i` | put a request naming it in the prompt box, for you to say what to do and send |
 | `a` | start a subagent reviewing it in the project's folder, while you keep talking |
-| `gx` | open it in the browser |
+| `gx` | open it in the browser; on a project, its pull requests on GitHub, as the list filters them |
 | `@` | put `owner/repo#42` in the prompt |
 | `y` `Y` | copy `#42` / its address |
-| `R` | read GitHub again |
+| `R` | read GitHub again, and look at the folders again for a repository cloned since |
 | `?` | show the keys |
 
 `Esc` hands the keyboard back to the prompt, and so do `Ctrl-d` and `Ctrl-b`, which Claude Code keeps for itself, so they never reach the pane. The keys are read as typed: with Caps Lock on, `j` arrives as `J`. With the mouse, a click on a project opens or closes it, and a second click on a pull request shows it.
@@ -91,9 +91,9 @@ Every request names the pull request, its repository, the project's folder and t
 
 ## Where the pull requests come from
 
-The pane lists the pull requests of the folder the session started in, if it is a git repository, and of each folder just under it that is one. Started in a folder holding a `backend` and a `frontend` repository side by side, it lists both. A project's GitHub repository is its `upstream` remote, as a fork's is, or else its `origin`. Two clones of one repository are listed once, and a repository with no GitHub remote is shown dimmed, without pull requests. The pane reads at most eight repositories and the newest 50 pull requests of each, with how long ago each was last updated. A count of `50+` means there are more: `gx` opens the rest on GitHub.
+The pane lists the pull requests of the folder the session started in, if it is a git repository, and of each folder just under it that is one. Started in a folder holding a `backend` and a `frontend` repository side by side, it lists both. A project's GitHub repository is its `upstream` remote, as a fork's is, or else its `origin`. Two clones of one repository are listed once, and a repository with no GitHub remote is shown dimmed, without pull requests. The pane lists at most eight GitHub repositories, and says `first 8` beside the folder's name when there are more; a clone or a folder off GitHub does not count against them. It shows the newest 50 pull requests of each, with how long ago each was last updated. A count of `50+` means there are more: `gx` on the project opens the rest on GitHub.
 
-The pane reads GitHub when it opens, on `R`, every five minutes while it is shown (every two while a listed pull request's checks still run), and after Claude runs a `gh pr` command that changes a pull request or a `git push`. A failed read says why under its project, such as `Not signed in: run gh auth login`. A pull request with a very long description or conversation is cut to fit, and so is a long diff, whole files at a time: a file past the room is listed without its hunks, and the sheet says what it left out.
+The pane reads GitHub when it opens, on `R`, every five minutes while it is shown (every two while a listed pull request's checks still run), and after Claude runs a `gh pr` command that changes a pull request, a `gh api` call that writes (a reply to a review comment), or a `git push`. It finds the projects once, and looks at the folders again only on `R`. A failed read says why under its project, such as `Not signed in: run gh auth login`. A pull request with a very long description or conversation is cut to fit, and so is a long diff, whole files at a time: a file past the room is listed without its hunks, and the sheet says what it left out.
 
 ## Install
 

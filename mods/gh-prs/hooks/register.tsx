@@ -37,8 +37,11 @@ const PANE = 'prs'
 const TITLE = 'PRs'
 // Room for `#123`, a title, a check mark and an age beside the chat.
 const WIDTH = 44
-// Projects read per refresh: each costs a `git remote` and a `gh pr list`.
+// Repositories looked at under the root, each a `git remote`, and of them the
+// GitHub projects listed, each a `gh pr list` per refresh.
+const MAX_SCANNED = 24
 const MAX_PROJECTS = 8
+// Pull requests listed per project; one more is asked for, to tell `50` from `50+`.
 const LIMIT = 50
 // Pull requests live on the network: read them again every five minutes,
 // or every two while a listed one's checks still run, since those settle in
@@ -55,8 +58,16 @@ const DIFF_ROOM = 60_000
 // again. A push changes one too, and starts its checks. A read changes
 // nothing, and Claude runs `gh pr view` and `gh pr diff` for every pull
 // request the pane hands it, so those read nothing again.
-const GH_WRITES =
-  /\bgh(?:\.exe)?\s+pr\s+(?:create|new|merge|close|reopen|edit|ready|review|comment|lock|unlock|update-branch)\b|\bgit(?:\.exe)?\s+(?:-C\s+\S+\s+)?push\b/
+// `gh api` writes when it names a method other than GET or sends fields (a
+// reply to a review comment); `git push` may carry options before `push`.
+const GH_WRITES = new RegExp(
+  [
+    /\bgh(?:\.exe)?\s+pr\s+(?:create|new|merge|close|reopen|edit|ready|review|comment|lock|unlock|update-branch)\b/.source,
+    /\bgh(?:\.exe)?\s+api\b[^\n|;&]*?(?:\s(?:-X|--method)[\s=]*(?:POST|PATCH|PUT|DELETE)\b|\s(?:-f|-F|--field|--raw-field|--input)[\s=])/.source,
+    /\bgit(?:\.exe)?\s[^\n|;&]*?\bpush\b/.source,
+  ].join('|'),
+  'i',
+)
 const ROOT_COLOR = '#bb9af7'
 // The line between the chat and the sheet: the list's guide color.
 const RULE_COLOR = '#565f89'
@@ -107,15 +118,19 @@ type Drawing = {
   Markdown: ElementConstructor<MarkdownProps>
 }
 
+/** The projects under a root, and whether more repositories are there than were read. */
+type Discovery = { projects: Project[]; isCapped: boolean }
+
+// The projects under each root, found once and kept across revisions: only
+// R looks at the folders again, since a refresh is for what GitHub says.
+let discovered = new Map<string, Promise<Discovery>>()
 // What GitHub said, per revision, shared by every draw and every key that
-// asks: the projects under a root, each repository's listing per filter, and
-// each pull request opened and its diff. A new revision starts them over.
+// asks: each repository's listing per filter, and each pull request opened
+// and its diff. A new revision starts them over.
 let readAt:
   | {
       revision: number
       root: string
-      /** One entry, under the root. */
-      projects: Map<string, Promise<Project[]>>
       listings: Map<string, Promise<Listing>>
       views: Map<string, Promise<Viewing>>
       diffs: Map<string, Promise<Diffing>>
@@ -218,11 +233,12 @@ export const register: Register = on => {
   on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
     const open = await read($, opened)
     if (open === null || e.props.hasSurvey) return next(e)
-    // The sheet goes with the list: a pane closed, or waiting undrawn on a
-    // narrow terminal, leaves the chat without a pull request over it.
+    // The sheet goes with the list: a pane closed, waiting undrawn on a
+    // narrow terminal, or a tab behind another (gh-issues', whose sheet is
+    // then drawn beneath) leaves the chat without a pull request over it.
     // A draw the engine dropped for a newer one passes, saying nothing.
     const panes = await $.ui.panes().catch(ifDropped)
-    if (!panes?.some(pane => pane.id === PANE && pane.isPlaced)) return next(e)
+    if (!panes?.some(pane => pane.id === PANE && pane.isShown && pane.isPlaced)) return next(e)
     const projects = await projectsOf($).catch(ifDropped)
     if (projects === undefined || !projects.some(one => one.repo === open.repo)) return next(e)
     const shownTab = await read($, tab)
@@ -343,6 +359,7 @@ export const register: Register = on => {
       <Box flexDirection="column">
         <Text color={ROOT_COLOR} bold>
           {props.root}
+          <Text dimColor>{props.cap > 0 ? `  first ${props.cap} projects` : ''}</Text>
         </Text>
         {props.rows.map(row => {
           if (row.kind === 'project') {
@@ -396,7 +413,7 @@ async function propsOf($: EngineInterface, width: number, height: number): Promi
     $.session.root(),
     $.clock.now(),
   ])
-  const projects = await projectsOf($)
+  const { projects, isCapped } = await discoveryOf($)
   const shownOpen = open !== null && projects.some(one => one.repo === open.repo) ? open : null
   const listings = await Promise.all(
     projects.map(one => (one.repo === '' ? undefined : listingOf($, one.repo, shown))),
@@ -408,7 +425,8 @@ async function propsOf($: EngineInterface, width: number, height: number): Promi
       rows.push({ kind: 'project', dir: one.dir, name: one.name, repo: '', isOpen: false, count: 0, isLimited: false, isFailed: false })
       continue
     }
-    const prs = 'prs' in listing ? listing.prs : []
+    const listed = 'prs' in listing ? listing.prs : []
+    const prs = listed.slice(0, LIMIT)
     const isOpen = !shut.includes(one.dir)
     rows.push({
       kind: 'project',
@@ -417,7 +435,7 @@ async function propsOf($: EngineInterface, width: number, height: number): Promi
       repo: one.repo,
       isOpen,
       count: prs.length,
-      isLimited: prs.length >= LIMIT,
+      isLimited: listed.length > LIMIT,
       isFailed: 'error' in listing,
     })
     if (!isOpen) continue
@@ -453,7 +471,15 @@ async function propsOf($: EngineInterface, width: number, height: number): Promi
     })
   }
 
-  return { root: rootLabel(root), filter: shown, open: shownOpen, rows, width, height }
+  return {
+    root: rootLabel(root),
+    cap: isCapped ? MAX_PROJECTS : 0,
+    filter: shown,
+    open: shownOpen,
+    rows,
+    width,
+    height,
+  }
 }
 
 /** The open pull request's conversation, or its diff, as the tab says. */
@@ -543,9 +569,19 @@ async function act(
     case 'query':
       await update($, filter, now => ({ ...now, query: message.text }))
       break
+    // R alone looks at the folders again, for a repository cloned since.
     case 'refresh':
+      discovered = new Map()
       await bump($)
       break
+    case 'browseAll': {
+      const project = projects.find(one => one.dir === message.dir && one.repo !== '')
+      if (project === undefined) break
+      const shown = await read($, filter)
+      const ran = await run($, ['gh', 'pr', 'list', '--repo', project.repo, ...filterArgs(shown), '--web'])
+      if ('error' in ran) $.ui.toast(`Could not open the pull requests of ${project.repo}: ${ran.error}`)
+      break
+    }
     case 'back':
       await update($, opened, () => null)
       break
@@ -653,16 +689,20 @@ async function refreshIfDue($: EngineInterface): Promise<void> {
 async function readsOf($: EngineInterface): Promise<NonNullable<typeof readAt>> {
   const [revision, root] = await Promise.all([read($, rev), $.session.root()])
   if (readAt?.revision !== revision || readAt.root !== root) {
-    readAt = { revision, root, projects: new Map(), listings: new Map(), views: new Map(), diffs: new Map() }
+    readAt = { revision, root, listings: new Map(), views: new Map(), diffs: new Map() }
   }
 
   return readAt
 }
 
-async function projectsOf($: EngineInterface): Promise<Project[]> {
-  const { root, projects } = await readsOf($)
+async function discoveryOf($: EngineInterface): Promise<Discovery> {
+  const root = await $.session.root()
 
-  return shared(projects, root, () => discover($, root))
+  return shared(discovered, root, () => discover($, root))
+}
+
+async function projectsOf($: EngineInterface): Promise<Project[]> {
+  return (await discoveryOf($)).projects
 }
 
 async function listingOf($: EngineInterface, repo: string, shown: PrFilter): Promise<Listing> {
@@ -687,9 +727,11 @@ async function diffOf($: EngineInterface, ref: PrRef): Promise<Diffing> {
 
 /**
  * The root, when it is a repository, then each folder just under it that is
- * one, in the order a file tree draws them; one row per GitHub repository.
+ * one, in the order a file tree draws them; one row per GitHub repository,
+ * up to MAX_PROJECTS of them, which a folder off GitHub or a second clone
+ * never counts against.
  */
-async function discover($: EngineInterface, root: string): Promise<Project[]> {
+async function discover($: EngineInterface, root: string): Promise<Discovery> {
   const entries = await $.fs.list(root).catch(otherwise([]))
   const dirs = entries
     .filter(entry => entry.kind === 'dir' && entry.name !== '.git')
@@ -702,9 +744,10 @@ async function discover($: EngineInterface, root: string): Promise<Project[]> {
       $.fs.exists(absoluteOf(root, dir === '' ? '.git' : `${dir}/.git`)).catch(otherwise(false)),
     ),
   )
-  const repoDirs = candidates.filter((_, index) => isRepo[index]).slice(0, MAX_PROJECTS)
+  const repoDirs = candidates.filter((_, index) => isRepo[index])
+  const scanned = repoDirs.slice(0, MAX_SCANNED)
   const repos = await Promise.all(
-    repoDirs.map(async dir => {
+    scanned.map(async dir => {
       const remotes = await $.process
         .run(['git', 'remote', '-v'], { cwd: absoluteOf(root, dir) })
         .catch(otherwise(undefined))
@@ -715,31 +758,46 @@ async function discover($: EngineInterface, root: string): Promise<Project[]> {
 
   const seen = new Set<string>()
   const projects: Project[] = []
-  for (const [index, dir] of repoDirs.entries()) {
+  let isCapped = repoDirs.length > scanned.length
+  for (const [index, dir] of scanned.entries()) {
     const repo = repos[index] ?? ''
-    // Two clones of one repository list its pull requests once.
-    if (repo !== '' && seen.has(repo.toLowerCase())) continue
-    seen.add(repo.toLowerCase())
+    if (repo !== '') {
+      // Two clones of one repository list its pull requests once.
+      if (seen.has(repo.toLowerCase())) continue
+      if (seen.size === MAX_PROJECTS) {
+        isCapped = true
+        continue
+      }
+      seen.add(repo.toLowerCase())
+    }
     projects.push({ dir, name: dir === '' ? rootLabel(root) : dir, path: absoluteOf(root, dir), repo })
   }
 
-  return projects
+  return { projects, isCapped }
 }
 
-async function readListing($: EngineInterface, repo: string, shown: PrFilter): Promise<Listing> {
+/** The flags of `gh pr list` that pick what the filter lists. */
+function filterArgs(shown: PrFilter): string[] {
   // Waiting on your review is a search of its own, beside the one typed.
   const search = [shown.who === 'review' ? 'review-requested:@me' : '', shown.query]
     .filter(part => part !== '')
     .join(' ')
-  const argv = [
-    'gh', 'pr', 'list',
-    '--repo', repo,
+
+  return [
     '--state', shown.state,
-    '--limit', String(LIMIT),
-    '--json', LIST_FIELDS,
     ...(shown.who === 'mine' ? ['--author', '@me'] : []),
     // GitHub's search syntax; an `is:` in it outranks --state.
     ...(search !== '' ? ['--search', search] : []),
+  ]
+}
+
+async function readListing($: EngineInterface, repo: string, shown: PrFilter): Promise<Listing> {
+  const argv = [
+    'gh', 'pr', 'list',
+    '--repo', repo,
+    '--limit', String(LIMIT + 1),
+    '--json', LIST_FIELDS,
+    ...filterArgs(shown),
   ]
   const ran = await run($, argv)
   if ('error' in ran) return ran
@@ -780,9 +838,15 @@ async function run(
 
     return { error: reasonOf(ran.stderr) || firstLine(ran.stdout) || `gh exited with ${ran.exitCode}` }
   } catch (error) {
+    const message = messageOf(error)
+    // Killed past its time, the call rejects: GitHub was slow, gh is there.
+    // Asked first, so a timeout's words are never taken for a dropped draw.
+    if (/\btime(?:d)? ?out\b|\btimeout\b/i.test(message) && !/abandon/i.test(message)) {
+      return { error: 'GitHub took too long to answer: try R later' }
+    }
     // Cut short with the draw that made it: `shared` reads it again.
     if (isAbandoned(error)) throw error
-    const reason = firstLine(messageOf(error))
+    const reason = firstLine(message)
 
     return { error: `Could not run gh${reason === '' ? '' : `: ${reason}`}. Is the GitHub CLI installed?` }
   }
@@ -810,6 +874,7 @@ function parseMessage(data: unknown, projects: readonly Project[]): PrsMessage |
     case 'toggle':
     case 'expand':
     case 'collapse':
+    case 'browseAll':
       return isProject(dir) ? { op, dir } : undefined
     case 'open':
     case 'diff':
